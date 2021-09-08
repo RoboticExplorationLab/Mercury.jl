@@ -2,3 +2,9 @@ name = "Mercury"
 uuid = "132e21b8-9b22-48e1-9f17-2c0f1280c909"
 authors = ["Brian Jackson <bjack205@gmail.com>"]
 version = "0.1.0"
+
+[deps]
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+ProtoBuf = "3349acd9-ac6a-5e09-bcdb-63829b23a429"
+Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
+ZMQ = "c2297ded-f4af-51ae-bb23-16f91089e4e1"
