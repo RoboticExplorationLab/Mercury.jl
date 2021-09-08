@@ -1,0 +1,4 @@
+name = "Mercury"
+uuid = "132e21b8-9b22-48e1-9f17-2c0f1280c909"
+authors = ["Brian Jackson <bjack205@gmail.com>"]
+version = "0.1.0"
