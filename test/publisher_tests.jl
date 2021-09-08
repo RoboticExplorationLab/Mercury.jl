@@ -3,7 +3,6 @@ using ZMQ
 using Sockets
 using Test
 using BenchmarkTools
-include("jlout/test_msg_pb.jl")
 
 # Construction
 @testset "Publisher" begin
@@ -42,5 +41,6 @@ include("jlout/test_msg_pb.jl")
         msg = TestMsg(x = 10, y = 11, z = 12)
         b = @benchmark Hg.publish($pub, $msg)
         @test maximum(b.gctimes) == 0.0
+        close(pub)
     end
 end

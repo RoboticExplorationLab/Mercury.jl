@@ -37,27 +37,16 @@ struct Publisher
         name = genpublishername(),
     )
         local socket
-        try
-            socket = ZMQ.Socket(ctx, ZMQ.PUB)
-        catch e
-            if e isa ZMQ.StateError
-                @error "Could not create socket for publisher $name. " * ZMQ.jl_zmq_error_str()
-            end
-            rethrow(e)
-        end
+        @catchzmq(
+            socket = ZMQ.Socket(ctx, ZMQ.PUB),
+            "Could not create socket for publisher $name."
+        )
 
-        try
-            ZMQ.bind(socket, "tcp://$ipaddr:$port")
-        catch e
-            if e isa ZMQ.StateError
-                @error "Could not bind publisher $name to " *
-                       tcpstring(ipaddr, port) *
-                       ". " *
-                       ZMQ.jl_zmq_error_str()
-                close(socket)
-            end
-            rethrow(e)
-        end
+        @catchzmq(
+            ZMQ.bind(socket, "tcp://$ipaddr:$port"),
+            "Could not bind publisher $name to $(tcpstring(ipaddr, port))"
+        )
+
         @info "Publishing $name on: $(tcpstring(ipaddr, port)), isopen = $(isopen(socket))"
         new(socket, port, ipaddr, IOBuffer(), name)
     end
@@ -80,20 +69,22 @@ Base.isopen(pub::Publisher) = Base.isopen(pub.socket)
 Base.close(pub::Publisher) = Base.close(pub.socket)
 
 function publish(pub::Publisher, proto_msg::ProtoBuf.ProtoType)
-    # Encode the message with protobuf
-    msg_size = ProtoBuf.writeproto(pub.buffer, proto_msg)
+    if isopen(pub)
+        # Encode the message with protobuf
+        msg_size = ProtoBuf.writeproto(pub.buffer, proto_msg)
 
-    # Create a new message to be sent and copy the encoded protobuf bytes
-    msg = ZMQ.Message(msg_size)
-    copyto!(msg, 1, pub.buffer.data, 1, msg_size)
+        # Create a new message to be sent and copy the encoded protobuf bytes
+        msg = ZMQ.Message(msg_size)
+        copyto!(msg, 1, pub.buffer.data, 1, msg_size)
 
-    # Send over ZMQ
-    # NOTE: ZMQ will de-allocate the message allocated above, so garbage
-    # collection should not be an issue here
-    ZMQ.send(pub.socket, msg)
+        # Send over ZMQ
+        # NOTE: ZMQ will de-allocate the message allocated above, so garbage
+        # collection should not be an issue here
+        ZMQ.send(pub.socket, msg)
 
-    # Move to the beginning of the buffer
-    seek(pub.buffer, 0)
+        # Move to the beginning of the buffer
+        seek(pub.buffer, 0)
+    end
 end
 
 tcpstring(pub::Publisher) = tcpstring(pub.ipaddr, pub.port)
