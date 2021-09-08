@@ -4,7 +4,7 @@ import Sockets
 import ProtoBuf
 import Logging
 
-const libhg = joinpath(@__DIR__, "..", "lib", "build", "libhg.so")
+const libhg = joinpath(@__DIR__, "..", "deps", "build", "libhg.so")
 
 
 greet() = print("Hello World!")
