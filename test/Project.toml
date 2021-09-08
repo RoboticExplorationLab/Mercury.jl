@@ -1,0 +1,6 @@
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+ProtoBuf = "3349acd9-ac6a-5e09-bcdb-63829b23a429"
+Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+ZMQ = "c2297ded-f4af-51ae-bb23-16f91089e4e1"
