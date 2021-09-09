@@ -36,7 +36,12 @@ struct Subscriber
     ipaddr::Sockets.IPv4
     buffer::IOBuffer
     name::String
-    function Subscriber(ctx::ZMQ.Context, ipaddr::Sockets.IPv4, port::Integer; name=gensubscribername())
+    function Subscriber(
+        ctx::ZMQ.Context,
+        ipaddr::Sockets.IPv4,
+        port::Integer;
+        name = gensubscribername(),
+    )
         local socket
         @catchzmq(
             socket = ZMQ.Socket(ctx, ZMQ.SUB),
@@ -55,14 +60,19 @@ struct Subscriber
         new(socket, port, ipaddr, IOBuffer(), name)
     end
 end
-function Subscriber(ctx::ZMQ.Context, ipaddr, port::Integer; name=gensubscribername())
+function Subscriber(ctx::ZMQ.Context, ipaddr, port::Integer; name = gensubscribername())
     if !(ipaddr isa Sockets.IPv4)
         ipaddr = Sockets.IPv4(ipaddr)
     end
-    Subscriber(ctx, ipaddr, port, name=name)
+    Subscriber(ctx, ipaddr, port, name = name)
 end
-function Subscriber(ctx::ZMQ.Context, ipaddr, port::AbstractString; name=gensubscribername())
-    Subscriber(ctx, ipaddr, parse(Int, port), name=name)
+function Subscriber(
+    ctx::ZMQ.Context,
+    ipaddr,
+    port::AbstractString;
+    name = gensubscribername(),
+)
+    Subscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
 function Subscriber(sub::Subscriber)
     return sub
@@ -70,7 +80,11 @@ end
 Base.isopen(sub::Subscriber) = Base.isopen(sub.socket)
 Base.close(sub::Subscriber) = Base.close(sub.socket)
 
-function receive(sub::Subscriber, proto_msg::ProtoBuf.ProtoType, write_lock = ReentrantLock())
+function receive(
+    sub::Subscriber,
+    proto_msg::ProtoBuf.ProtoType,
+    write_lock = ReentrantLock(),
+)
     if isopen(sub)
         bin_data = ZMQ.recv(sub.socket)
         io = seek(convert(IOStream, bin_data), 0)
@@ -82,7 +96,11 @@ function receive(sub::Subscriber, proto_msg::ProtoBuf.ProtoType, write_lock = Re
     end
 end
 
-function subscribe(sub::Subscriber, proto_msg::ProtoBuf.ProtoType, write_lock = ReentrantLock())
+function subscribe(
+    sub::Subscriber,
+    proto_msg::ProtoBuf.ProtoType,
+    write_lock = ReentrantLock(),
+)
     @info "Listening for message type: $(typeof(proto_msg)), on: tcp://$(string(sub.ipaddr)):$(sub.port)"
     try
         while true
