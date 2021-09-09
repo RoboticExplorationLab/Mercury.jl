@@ -75,8 +75,8 @@ mutable struct LoopRateLimiter
     us_offset::Int   # sleep offset, estimated online (us)
     t_batch::UInt64  # start time of last batch (ns)
     t_start::UInt64  # start time of the loop (ns)
-    i_batch::Int     
-    function LoopRateLimiter(rate; N_batch=10)
+    i_batch::Int
+    function LoopRateLimiter(rate; N_batch = 10)
         ns_target = round(Int, 1 / rate * 1_000_000_000)
         new(rate, ns_target, N_batch, 0, 0, 0, 0)
     end
@@ -88,7 +88,7 @@ end
 Reset the loop rate limiter before a loop. Not necessary if the object is created directly
 before calling the loop.
 """
-function reset!(lrl::LoopRateLimiter; all::Bool=true)
+function reset!(lrl::LoopRateLimiter; all::Bool = true)
     lrl.i_batch = 0
 end
 
@@ -108,7 +108,7 @@ function startloop(lrl::LoopRateLimiter)
         t_batch_actual = Int(lrl.t_start - lrl.t_batch)
         us_error = (t_batch_actual - t_batch_expected) ÷ us2ns ÷ lrl.N_batch
         lrl.us_offset += us_error  # update the estimate of the offset
-        lrl.t_batch = lrl.t_start  
+        lrl.t_batch = lrl.t_start
         lrl.i_batch = 1            # reset the batch loop count
     else
         lrl.i_batch += 1           # increment the batch loop count
