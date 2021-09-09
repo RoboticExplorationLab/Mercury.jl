@@ -10,6 +10,6 @@ makedocs(
 )
 
 deploydocs(
-    repo = https://github.com/RoboticExplorationLab/Mercury.jl.git,
+    repo = "github.com/RoboticExplorationLab/Mercury.jl.git",
     devbranch = "main"
 )
