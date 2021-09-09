@@ -5,7 +5,8 @@ makedocs(
     sitename = "Mercury.jl",
     format = Documenter.HTML(prettyurls = false),
     pages = [
-        "Introduction" => "index.md"
+        "Introduction" => "index.md",
+        "API" => "api.md"
     ]
 )
 
