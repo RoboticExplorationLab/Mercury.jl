@@ -127,8 +127,16 @@ function Base.sleep(lrl::LoopRateLimiter)
     ns_elapsed = round(Int, t_stop - lrl.t_start)
     ns_diff = lrl.ns_target - ns_elapsed                   # time error (ns)
     us_diff = round(Int, ns_diff ÷ us2ns) - lrl.us_offset  # sleep time (us)
+    # if (us_diff > 1000) && false
+    #     sleep(us_diff / 1000.0)
+    # elseif (us_diff > 0)
+    #     usleep(us_diff)
+    # end
     if (us_diff > 0)
-        usleep(us_diff)
+        tsleep = @async usleep(us_diff)
+        yield()
+        wait(tsleep)
+        # sleep(us_diff / 1000.0)
     end
 end
 

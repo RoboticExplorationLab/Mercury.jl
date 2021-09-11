@@ -16,6 +16,7 @@ Base.@kwdef mutable struct SubscriberFlags
     hasreceived::Bool = false
 end
 
+
 """
     Subscriber
 
@@ -56,6 +57,7 @@ struct Subscriber
     name::String
     socket_lock::ReentrantLock
     flags::SubscriberFlags
+    rate_info::RateInfo
     function Subscriber(
         ctx::ZMQ.Context,
         ipaddr::Sockets.IPv4,
@@ -65,27 +67,51 @@ struct Subscriber
         local socket
         @catchzmq(
             socket = ZMQ.Socket(ctx, ZMQ.SUB),
-            "Could nnot create socket for subscriber $name."
+            "Could not create socket for subscriber $name."
         )
+        # @catchzmq(
+        #     ZMQ._set_rcvhwm(socket, 1),
+        #     "Could not set high water mark for subscriber $name."
+        # )
+
+        # @catchzmq(
+        #     set_conflate(socket, 1),
+        #     "Could not set the conflate option for subscriber $name."
+        # )
+        # println("Set conflate option to true")
+
         @catchzmq(
             ZMQ.subscribe(socket),
             "Could not set the socket as a subscriber for subscriber $name."
         )
+
+
         @catchzmq(
             ZMQ.connect(socket, "tcp://$ipaddr:$port"),
             "Could not connect subscriber $name to port $(tcpstring(ipaddr, port))."
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        new(socket, port, ipaddr, IOBuffer(), name, ReentrantLock(), SubscriberFlags())
+        new(
+            socket,
+            port,
+            ipaddr,
+            IOBuffer(),
+            name,
+            ReentrantLock(),
+            SubscriberFlags(),
+            RateInfo(),
+        )
     end
 end
+
 function Subscriber(ctx::ZMQ.Context, ipaddr, port::Integer; name = gensubscribername())
     if !(ipaddr isa Sockets.IPv4)
         ipaddr = Sockets.IPv4(ipaddr)
     end
     Subscriber(ctx, ipaddr, port, name = name)
 end
+
 function Subscriber(
     ctx::ZMQ.Context,
     ipaddr,
@@ -94,6 +120,7 @@ function Subscriber(
 )
     Subscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
+
 function Subscriber(sub::Subscriber)
     return sub
 end
@@ -114,8 +141,10 @@ function receive(
 )
     if isopen(sub)
         sub.flags.isreceiving = true
-        local bin_data
+        # local bin_data
+        bin_data = ZMQ.Message()
         lock(sub.socket_lock) do
+            # ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
             bin_data = ZMQ.recv(sub.socket)
         end
         sub.flags.isreceiving = false
@@ -125,6 +154,8 @@ function receive(
         lock(write_lock) do
             ProtoBuf.readproto(io, proto_msg)
         end
+
+        printrate(sub.rate_info)
     end
 end
 
@@ -134,10 +165,12 @@ function subscribe(
     write_lock = ReentrantLock(),
 )
     @info "Listening for message type: $(typeof(proto_msg)), on: $(tcpstring(sub))"
+    init(sub.rate_info, getname(sub))
     try
         while isopen(sub)
             receive(sub, proto_msg, write_lock)
             GC.gc(false)  # TODO(bjack205)[#8] Is this needed?
+            # sleep(0.001)
             yield()
         end
         @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
@@ -164,7 +197,7 @@ function publish_until_receive(
     pub::Publisher,
     sub::Subscriber,
     msg_out::ProtoBuf.ProtoType,
-    timeout=1.0  # seconds
+    timeout = 1.0,  # seconds
 )
     @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"
     t_start = time()
@@ -172,7 +205,7 @@ function publish_until_receive(
     while (time() - t_start < timeout)
         publish(pub, msg_out)
         sleep(0.001)
-        if sub.flags.hasreceived 
+        if sub.flags.hasreceived
             return true
         end
     end

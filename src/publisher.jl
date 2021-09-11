@@ -47,6 +47,16 @@ struct Publisher
             "Could not bind publisher $name to $(tcpstring(ipaddr, port))"
         )
 
+        # @catchzmq(
+        #     ZMQ._set_sndhwm(socket, 1),
+        #     "Could not set high water mark for publisher $name."
+        # )
+
+        # @catchzmq(
+        #     set_conflate(socket, 0),
+        #     "Could not set the conflate option for publisher $name."
+        # )
+
         @info "Publishing $name on: $(tcpstring(ipaddr, port)), isopen = $(isopen(socket))"
         new(socket, port, ipaddr, IOBuffer(), name)
     end
@@ -67,6 +77,7 @@ function Publisher(
 end
 Base.isopen(pub::Publisher) = Base.isopen(pub.socket)
 Base.close(pub::Publisher) = Base.close(pub.socket)
+getname(pub::Publisher) = pub.name
 
 function publish(pub::Publisher, proto_msg::ProtoBuf.ProtoType)
     if isopen(pub)
