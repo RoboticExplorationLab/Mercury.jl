@@ -67,7 +67,7 @@ function Base.readuntil(sub::SerialSubscriber, delim::UInt8)
             # local buffer one byte at a time until delim byte encoutered then return
             sub.read_buffer[i] = read(sub.serial_port, UInt8)
             if sub.read_buffer[i] == delim #0x00
-                return @view sub.read_buffer[1:i]
+                return @view sub.read_buffer[max(1,i+1-msg_block_size):i]
             end
         end
     end
@@ -83,7 +83,7 @@ to decode message block.
 function decode(sub::SerialSubscriber, msg::AbstractVector{UInt8})
     incoming_msg_size = length(msg)
     incoming_msg_size == 0 && error("Empty message passed to encode!")
-    incoming_msg_size > msg_block_size && error("Can only safely encode 254 bytes at a time")
+    incoming_msg_size > msg_block_size && error("Can only safely encode 256 bytes at a time")
 
     if !any(msg .== 0x00)
         return nothing
