@@ -35,7 +35,7 @@ macro catchserial(expr, errmsg)
             $expr
         catch e
             if e isa ErrorException
-                @error $errmsg * "\n" * ZMQ.jl_zmq_error_str()
+                @error $errmsg * "\n"
             end
             rethrow(e)
         end

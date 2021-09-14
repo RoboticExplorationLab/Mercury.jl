@@ -7,8 +7,6 @@ msg_block_size = 256
 """
 mutable struct SerialPublisher
     serial_port::LibSerialPort.SerialPort
-    port_name::String
-    baudrate::Int64
 
     name::String
 
@@ -18,25 +16,34 @@ mutable struct SerialPublisher
     msg_out_buffer::StaticArrays.MVector{msg_block_size, UInt8}
     msg_out_length::Int64
 
-    function SerialPublisher(port_name::String,
-                             baudrate::Int64;
+    function SerialPublisher(serial_port::LibSerialPort.SerialPort;
                              name = genpublishername(),
                              )
-        serial_port = nothing
-        @catchserial(serial_port = LibSerialPort.open(port_name, baudrate),
-                     "Failed to connect to serial port at `$port_name`"
-                     )
+        @catchserial(LibSerialPort.open(serial_port),
+                        "Failed to open serial port: `$serial_port`"
+                        )
         close(serial_port)
+
         # Buffer for writing ProtoBuf messages
         proto_buffer = IOBuffer()
         # Vector written to when encoding Protobuf using COBS protocol
         msg_out_buffer = StaticArrays.@MVector zeros(UInt8, msg_block_size)
         msg_out_length = 0
 
-        new(serial_port, port_name, baudrate, name, proto_buffer,
-            msg_out_buffer, msg_out_length)
+        new(serial_port, name, proto_buffer, msg_out_buffer, msg_out_length)
     end
 end
+
+function SerialPublisher(port_name::String,
+                         baudrate::Int64;
+                         name = genpublishername(),
+                         )
+    sp = LibSerialPort.open(port_name, baudrate)
+    LibSerialPort.close(sp)
+
+    return SerialPublisher(sp; name = name)
+end
+
 
 Base.isopen(pub::SerialPublisher) = LibSerialPort.isopen(pub.serial_port)
 Base.close(pub::SerialPublisher) = LibSerialPort.close(pub.serial_port)
@@ -45,6 +52,8 @@ function Base.open(pub::SerialPublisher)
     if !isopen(pub)
         LibSerialPort.open(pub.serial_port)
     end
+
+    return Base.isopen(pub)
 end
 
 """
