@@ -5,11 +5,11 @@ using BenchmarkTools
 
 
 @testset "Serial Pub/Sub Tests" begin
-    include("../jlout/test_msg_pb.jl")
+    include("jlout/test_msg_pb.jl")
     port_name = "/dev/tty.usbmodem92222901"
     baudrate = 57600
 
-    @testset "Subscriber Construction" begin
+    @testset "SerialSubscriber Construction" begin
         Hg.reset_sub_count()
         sub = Hg.SerialSubscriber(port_name, baudrate);
 
@@ -31,7 +31,7 @@ using BenchmarkTools
         @test !isopen(sub.serial_port)
     end
 
-    @testset "Publisher Construction" begin
+    @testset "SerialPublisher Construction" begin
         Hg.reset_pub_count()
         pub = Hg.SerialPublisher(port_name, baudrate);
 
@@ -94,7 +94,7 @@ using BenchmarkTools
         end
     end
 
-    @testset "Simple Pub/Sub" begin
+    @testset "Simple Serial Pub/Sub" begin
         # Test simple pub/sub on same port
         sp = LibSerialPort.open(port_name, baudrate)
         close(sp)
@@ -111,7 +111,7 @@ using BenchmarkTools
         open(sp)
         try
             Hg.publish(pub, msg_out)
-            sleep(0.001)
+            sleep(0.01)
             Hg.receive(sub, msg)
         finally
             close(sp)

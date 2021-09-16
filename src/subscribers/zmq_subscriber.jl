@@ -1,14 +1,14 @@
 """
-    Subscriber
+    ZmqSubscriber
 
 A simple wrapper around a ZMQ subscriber, but only for protobuf messages.
 
-# Construction 
+# Construction
 
     Subscriber(context::ZMQ.Context, ipaddr, port; name)
-    
-To create a subscriber, pass in a `ZMQ.Context`, which allows all related 
-publisher / subscribers to be collected in a "group." The subscriber also 
+
+To create a subscriber, pass in a `ZMQ.Context`, which allows all related
+publisher / subscribers to be collected in a "group." The subscriber also
 needs to be provided the IPv4 address (either as a string or as a `Sockets.IPv4`
 object), and the port (either as an integer or a string).
 
@@ -17,7 +17,7 @@ to provide a helpful description about what the subscriber is subscribing to. It
 to "subscriber_#" where `#` is an increasing index.
 
 # Usage
-Use the blocking `subscribe` method to continually listen to the socket and 
+Use the blocking `subscribe` method to continually listen to the socket and
 store data in a protobuf type:
 
     subscribe(sub::Subscriber, proto_msg::ProtoBuf.ProtoType)
@@ -30,13 +30,13 @@ sub_task = @task subscribe(sub, proto_msg)
 schedule(sub_task)
 ```
 """
-struct Subscriber
+struct ZmqSubscriber <: Subscriber
     socket::ZMQ.Socket
     port::Int64
     ipaddr::Sockets.IPv4
     buffer::IOBuffer
     name::String
-    function Subscriber(
+    function ZmqSubscriber(
         ctx::ZMQ.Context,
         ipaddr::Sockets.IPv4,
         port::Integer;
@@ -60,28 +60,28 @@ struct Subscriber
         new(socket, port, ipaddr, IOBuffer(), name)
     end
 end
-function Subscriber(ctx::ZMQ.Context, ipaddr, port::Integer; name = gensubscribername())
+function ZmqSubscriber(ctx::ZMQ.Context, ipaddr, port::Integer; name = gensubscribername())
     if !(ipaddr isa Sockets.IPv4)
         ipaddr = Sockets.IPv4(ipaddr)
     end
-    Subscriber(ctx, ipaddr, port, name = name)
+    ZmqSubscriber(ctx, ipaddr, port, name = name)
 end
-function Subscriber(
+function ZmqSubscriber(
     ctx::ZMQ.Context,
     ipaddr,
     port::AbstractString;
     name = gensubscribername(),
 )
-    Subscriber(ctx, ipaddr, parse(Int, port), name = name)
+    ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
-function Subscriber(sub::Subscriber)
+function ZmqSubscriber(sub::ZmqSubscriber)
     return sub
 end
-Base.isopen(sub::Subscriber) = Base.isopen(sub.socket)
-Base.close(sub::Subscriber) = Base.close(sub.socket)
+Base.isopen(sub::ZmqSubscriber) = Base.isopen(sub.socket)
+Base.close(sub::ZmqSubscriber) = Base.close(sub.socket)
 
 function receive(
-    sub::Subscriber,
+    sub::ZmqSubscriber,
     proto_msg::ProtoBuf.ProtoType,
     write_lock = ReentrantLock(),
 )
@@ -97,7 +97,7 @@ function receive(
 end
 
 function subscribe(
-    sub::Subscriber,
+    sub::ZmqSubscriber,
     proto_msg::ProtoBuf.ProtoType,
     write_lock = ReentrantLock(),
 )
@@ -126,4 +126,4 @@ function subscribe(
     return nothing
 end
 
-tcpstring(sub::Subscriber) = tcpstring(sub.ipaddr, sub.port)
+tcpstring(sub::ZmqSubscriber) = tcpstring(sub.ipaddr, sub.port)

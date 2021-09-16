@@ -23,13 +23,13 @@ To publish a message, just use the `publish` method on a protobuf type:
 
     publish(pub::Publisher, proto_msg::ProtoBuf.ProtoType)
 """
-struct Publisher
+struct ZmqPublisher <: Publisher
     socket::ZMQ.Socket
     port::Int64
     ipaddr::Sockets.IPv4
     buffer::IOBuffer
     name::String
-    function Publisher(
+    function ZmqPublisher(
         ctx::ZMQ.Context,
         ipaddr::Sockets.IPv4,
         port::Integer;
@@ -50,24 +50,24 @@ struct Publisher
         new(socket, port, ipaddr, IOBuffer(), name)
     end
 end
-function Publisher(ctx::ZMQ.Context, ipaddr, port::Integer; name = genpublishername())
+function ZmqPublisher(ctx::ZMQ.Context, ipaddr, port::Integer; name = genpublishername())
     if !(ipaddr isa Sockets.IPv4)
         ipaddr = Sockets.IPv4(ipaddr)
     end
-    Publisher(ctx, ipaddr, port, name = name)
+    ZmqPublisher(ctx, ipaddr, port, name = name)
 end
-function Publisher(
+function ZmqPublisher(
     ctx::ZMQ.Context,
     ipaddr,
     port::AbstractString;
     name = genpublishername(),
 )
-    Publisher(ctx, ipaddr, parse(Int, port), name = name)
+    ZmqPublisher(ctx, ipaddr, parse(Int, port), name = name)
 end
-Base.isopen(pub::Publisher) = Base.isopen(pub.socket)
-Base.close(pub::Publisher) = Base.close(pub.socket)
+Base.isopen(pub::ZmqPublisher) = Base.isopen(pub.socket)
+Base.close(pub::ZmqPublisher) = Base.close(pub.socket)
 
-function publish(pub::Publisher, proto_msg::ProtoBuf.ProtoType)
+function publish(pub::ZmqPublisher, proto_msg::ProtoBuf.ProtoType)
     if isopen(pub)
         # Encode the message with protobuf
         msg_size = ProtoBuf.writeproto(pub.buffer, proto_msg)
@@ -86,4 +86,4 @@ function publish(pub::Publisher, proto_msg::ProtoBuf.ProtoType)
     end
 end
 
-tcpstring(pub::Publisher) = tcpstring(pub.ipaddr, pub.port)
+tcpstring(pub::ZmqPublisher) = tcpstring(pub.ipaddr, pub.port)

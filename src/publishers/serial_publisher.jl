@@ -5,12 +5,10 @@ msg_block_size = 256
 
 """
 """
-mutable struct SerialPublisher
+mutable struct SerialPublisher <: Publisher
     serial_port::LibSerialPort.SerialPort
 
     name::String
-
-    proto_buffer::IOBuffer
 
     # Buffer for encoded messages
     msg_out_buffer::StaticArrays.MVector{msg_block_size, UInt8}
@@ -24,20 +22,18 @@ mutable struct SerialPublisher
                         )
         close(serial_port)
 
-        # Buffer for writing ProtoBuf messages
-        proto_buffer = IOBuffer()
         # Vector written to when encoding Protobuf using COBS protocol
         msg_out_buffer = StaticArrays.@MVector zeros(UInt8, msg_block_size)
         msg_out_length = 0
 
-        new(serial_port, name, proto_buffer, msg_out_buffer, msg_out_length)
+        new(serial_port, name, msg_out_buffer, msg_out_length)
     end
 end
 
 function SerialPublisher(port_name::String,
-                         baudrate::Int64;
-                         name = genpublishername(),
-                         )
+                   baudrate::Int64;
+                   name = genpublishername(),
+                   )
     sp = LibSerialPort.open(port_name, baudrate)
     LibSerialPort.close(sp)
 
@@ -99,8 +95,5 @@ function publish(pub::SerialPublisher, proto_msg::ProtoBuf.ProtoType)
         # Encode the serialized message using COBS
         encoded_msg = encode(pub, msg)
         write(pub.serial_port, encoded_msg)
-
-        # Move to the beginning of the buffer used for writing protobufs
-        # seek(pub.proto_buffer, 0)
     end
 end

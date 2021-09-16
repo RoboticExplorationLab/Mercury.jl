@@ -4,14 +4,14 @@ using Sockets
 using Test
 using BenchmarkTools
 
-@testset "Subscriber" begin
+@testset "ZmqSubscriber" begin
     Hg.reset_sub_count()
     ctx = ZMQ.Context()
     addr = ip"127.0.0.1"
     port = 5555
 
     @testset "Construction" begin
-        sub = Hg.Subscriber(ctx, addr, port)
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
 
         @test isopen(sub)
         @test sub.port == port
@@ -20,13 +20,13 @@ using BenchmarkTools
         close(sub)
         @test !isopen(sub.socket)
 
-        sub = Hg.Subscriber(ctx, addr, string(port))
+        sub = Hg.ZmqSubscriber(ctx, addr, string(port))
         @test sub.port == port
         @test sub.ipaddr == addr
         @test sub.name == "subscriber_2"
         close(sub)
 
-        sub = Hg.Subscriber(ctx, string(addr), port)
+        sub = Hg.ZmqSubscriber(ctx, string(addr), port)
         @test sub.port == port
         @test sub.ipaddr == addr
         @test sub.name == "subscriber_3"
@@ -34,8 +34,8 @@ using BenchmarkTools
 
         # Create 2 subscribers
         @test_nowarn begin
-            sub1 = Hg.Subscriber(ctx, string(addr), port)
-            sub2 = Hg.Subscriber(ctx, string(addr), port)
+            sub1 = Hg.ZmqSubscriber(ctx, string(addr), port)
+            sub2 = Hg.ZmqSubscriber(ctx, string(addr), port)
             close(sub1)
             close(sub2)
         end
@@ -43,14 +43,14 @@ using BenchmarkTools
 
     @testset "Simple Pub/Sub" begin
         # Test simple pub/sub
-        sub = Hg.Subscriber(ctx, addr, port)
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
         @test isopen(sub)
         msg = TestMsg(x = 10, y = 11, z = 12)
         rtask = @task Hg.receive(sub, msg)
         schedule(rtask)
         istaskdone(rtask)
 
-        pub = Hg.Publisher(ctx, addr, port)
+        pub = Hg.ZmqPublisher(ctx, addr, port)
         msg_out = TestMsg(x = 1, y = 2, z = 3)
         @test msg.x == 10
         @test msg.y == 11
@@ -79,8 +79,8 @@ using BenchmarkTools
                 sleep(0.001)
             end
         end
-        sub = Hg.Subscriber(ctx, addr, port, name = "TestSub")
-        pub = Hg.Publisher(ctx, addr, port, name = "TestPub")
+        sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
+        pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
         msg = TestMsg(x = 10, y = 11, z = 12)
 
         # Publish message in a separate task (really fast)
@@ -97,7 +97,6 @@ using BenchmarkTools
         @test istaskdone(pub_task)
         close(pub)
         close(sub)
-
 
         # Check that receive doesn't error after closing the port
         # but should print a warning message

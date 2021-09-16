@@ -1,7 +1,7 @@
 msg_block_size = 256
 serial_port_buffer_size = 1024
 
-mutable struct SerialSubscriber
+mutable struct SerialSubscriber <: Subscriber
     serial_port::LibSerialPort.SerialPort
 
     name::String
@@ -39,7 +39,6 @@ function SerialSubscriber(port_name::String,
 
     return SerialSubscriber(sp; name = name)
 end
-
 
 
 Base.isopen(sub::SerialSubscriber) = LibSerialPort.isopen(sub.serial_port)

@@ -18,9 +18,17 @@ const libhg = libhg_library_filename
 
 greet() = print("Hello World!")
 include("utils.jl")
-include("publisher.jl")
-include("subscriber.jl")
-include("serial_publisher.jl")
-include("serial_subscriber.jl")
+
+include("publishers/abstract_publisher.jl")
+include("publishers/serial_publisher.jl")
+include("publishers/zmq_publisher.jl")
+
+
+include("subscribers/abstract_subscriber.jl")
+include("subscribers/serial_subscriber.jl")
+include("subscribers/zmq_subscriber.jl")
+
+# include("serial_publisher.jl")
+# include("serial_subscriber.jl")
 
 end # module
