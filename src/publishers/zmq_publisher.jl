@@ -86,4 +86,4 @@ function publish(pub::ZmqPublisher, proto_msg::ProtoBuf.ProtoType)
     end
 end
 
-tcpstring(pub::ZmqPublisher) = tcpstring(pub.ipaddr, pub.port)
+tcpstring(pub::ZmqPublisher) = "tcp://" * string(pub.ipaddr) * ":" * string(pub.port)

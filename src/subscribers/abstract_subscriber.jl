@@ -5,13 +5,13 @@ Base.close(sub::Subscriber)::Nothing = error("The `close` method hasn't been imp
 
 
 function receive(sub::Subscriber,
-                 proto_msg::ProtoBuf.ProtoType,
-                 write_lock = ReentrantLock())::Nothing
+                proto_msg::ProtoBuf.ProtoType,
+                write_lock = ReentrantLock())::Nothing
     error("The `receive` method hasn't been implemented for your Subscriber yet!")
 end
 
 function subscribe(sub::Subscriber,
-                   proto_msg::ProtoBuf.ProtoType,
-                   write_lock = ReentrantLock())::Nothing
+                proto_msg::ProtoBuf.ProtoType,
+                write_lock = ReentrantLock())::Nothing
     error("The `subscribe` method hasn't been implemented for your Subscriber yet!")
 end

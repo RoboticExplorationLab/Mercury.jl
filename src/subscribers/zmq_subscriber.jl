@@ -126,4 +126,4 @@ function subscribe(
     return nothing
 end
 
-tcpstring(sub::ZmqSubscriber) = tcpstring(sub.ipaddr, sub.port)
+tcpstring(sub::ZmqSubscriber) = "tcp://" * string(sub.ipaddr) * ":" * string(sub.port)
