@@ -4,12 +4,12 @@
 
 A simple wrapper around a ZMQ publisher, but only publishes protobuf messages.
 
-# Construction 
+# Construction
 
     Publisher(context::ZMQ.Context, ipaddr, port; name)
-    
-To create a publisher, pass in a `ZMQ.Context`, which allows all related 
-publisher / subscribers to be collected in a "group." The publisher also 
+
+To create a publisher, pass in a `ZMQ.Context`, which allows all related
+publisher / subscribers to be collected in a "group." The publisher also
 needs to be provided the IPv4 address (either as a string or as a `Sockets.IPv4`
 object), and the port (either as an integer or a string).
 
@@ -17,7 +17,7 @@ A name can also be optionally provided via the `name` keyword, which can be used
 to provide a helpful description about what the publisher is publishing. It defaults
 to "publisher_#" where `#` is an increasing index.
 
-If the port 
+If the port
 
 # Usage
 To publish a message, just use the `publish` method on a protobuf type:
@@ -41,7 +41,6 @@ struct Publisher
             socket = ZMQ.Socket(ctx, ZMQ.PUB),
             "Could not create socket for publisher $name."
         )
-
         @catchzmq(
             ZMQ.bind(socket, "tcp://$ipaddr:$port"),
             "Could not bind publisher $name to $(tcpstring(ipaddr, port))"

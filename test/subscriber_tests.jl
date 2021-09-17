@@ -67,8 +67,8 @@ end
             msg_out.x = i
             Hg.publish(pub, msg_out)
             sleep(0.001)
-            if istaskdone(rtask) 
-                cnt = i 
+            if istaskdone(rtask)
+                cnt = i
                 break
             end
         end
@@ -135,7 +135,7 @@ end
 
         sub.flags.hasreceived = false
         Hg.publish_until_receive(pub, sub, msg_out)
-        @test istaskdone(close_task)  # should be closed now that the receive finished 
+        @test istaskdone(close_task)  # should be closed now that the receive finished
         @test !isopen(sub)
         sleep(0.1)  # sleep to wait for socket to close and the subscribe loop to exit
         @test istaskdone(sub_task)  # the subscriber task should finish after the socket is closed
@@ -151,8 +151,48 @@ end
         Hg.forceclose(sub)
         sleep(0.1)  # wait for the task to finish
         @test istaskdone(sub_task)  # the subscriber task should finish after the socket is closed
-        @test istaskfailed(sub_task) # the task will exit with an error since 
+        @test istaskfailed(sub_task) # the task will exit with an error since
         close(pub)
     end
 
+        @testset "Testing Subscriber Conflate" begin
+        ## Test receive performance
+        function pub_message(pub)
+            rate = 100  # Publishing at 100 Hz
+            lrl = Hg.LoopRateLimiter(rate)
+
+            msg_out = TestMsg(x = 1, y = 2, z = 3)
+            global do_publish
+            i = 0
+            Hg.@rate while (do_publish)
+                msg_out.x = i
+                Hg.publish(pub, msg_out)
+                i += 1
+                sleep(0.001)
+            end lrl
+        end
+
+        sub = Hg.Subscriber(ctx, addr, port, name = "TestSub")
+        pub = Hg.Publisher(ctx, addr, port, name = "TestPub")
+        msg = TestMsg(x = 10, y = 11, z = 12)
+
+        # Publish message in a separate task (really fast)
+        global do_publish = true
+        pub_task = @task pub_message(pub)
+        schedule(pub_task)
+        @test !istaskdone(pub_task)
+
+        Hg.receive(sub, msg)
+        first_rec = msg.x
+        sleep(.5)
+        Hg.receive(sub, msg)
+        second_rec = msg.x
+        @test second_rec > first_rec + 10
+
+        do_publish = false
+        sleep(0.1)
+        @test istaskdone(pub_task)
+        close(pub)
+        close(sub)
+    end
 end

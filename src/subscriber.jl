@@ -22,12 +22,12 @@ end
 
 A simple wrapper around a ZMQ subscriber, but only for protobuf messages.
 
-# Construction 
+# Construction
 
     Subscriber(context::ZMQ.Context, ipaddr, port; name)
-    
-To create a subscriber, pass in a `ZMQ.Context`, which allows all related 
-publisher / subscribers to be collected in a "group." The subscriber also 
+
+To create a subscriber, pass in a `ZMQ.Context`, which allows all related
+publisher / subscribers to be collected in a "group." The subscriber also
 needs to be provided the IPv4 address (either as a string or as a `Sockets.IPv4`
 object), and the port (either as an integer or a string).
 
@@ -36,7 +36,7 @@ to provide a helpful description about what the subscriber is subscribing to. It
 to "subscriber_#" where `#` is an increasing index.
 
 # Usage
-Use the blocking `subscribe` method to continually listen to the socket and 
+Use the blocking `subscribe` method to continually listen to the socket and
 store data in a protobuf type:
 
     subscribe(sub::Subscriber, proto_msg::ProtoBuf.ProtoType)
@@ -86,6 +86,10 @@ struct Subscriber
         )
 
 
+        @catchzmq(
+            set_conflate(socket, 1),
+            "Could not set the conflate option for subscriber $name."
+        )
         @catchzmq(
             ZMQ.connect(socket, "tcp://$ipaddr:$port"),
             "Could not connect subscriber $name to port $(tcpstring(ipaddr, port))."
@@ -146,6 +150,8 @@ function receive(
         lock(sub.socket_lock) do
             # ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
             bin_data = ZMQ.recv(sub.socket)
+            # Forces subscriber to conflate messages
+            ZMQ.getproperty(sub.socket, :events)
         end
         sub.flags.isreceiving = false
         sub.flags.hasreceived = true
@@ -188,7 +194,7 @@ end
     publish_until_receive(pub, sub, msg_out; [timeout])
 
 Publish a message via the publisher `pub` until it's received by the subscriber `sub`.
-Both `pub` and `sub` should have the same port and IP address. 
+Both `pub` and `sub` should have the same port and IP address.
 
 The function returns `true` if a message was received before `timeout` seconds have passed,
     and `false` otherwise.
