@@ -2,7 +2,7 @@ name: CI
 on:
   push:
     branches:
-      - main 
+      - main
     tags: '*'
   pull_request:
 jobs:
@@ -15,7 +15,7 @@ jobs:
           - '1.6'
         os:
           - ubuntu-latest
-          # - macOS-latest
+          - macOS-latest
           # - windows-latest
         arch:
           - x64

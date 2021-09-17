@@ -3,12 +3,12 @@
 
 A simple wrapper around a ZMQ subscriber, but only for protobuf messages.
 
-# Construction 
+# Construction
 
     Subscriber(context::ZMQ.Context, ipaddr, port; name)
-    
-To create a subscriber, pass in a `ZMQ.Context`, which allows all related 
-publisher / subscribers to be collected in a "group." The subscriber also 
+
+To create a subscriber, pass in a `ZMQ.Context`, which allows all related
+publisher / subscribers to be collected in a "group." The subscriber also
 needs to be provided the IPv4 address (either as a string or as a `Sockets.IPv4`
 object), and the port (either as an integer or a string).
 
@@ -17,7 +17,7 @@ to provide a helpful description about what the subscriber is subscribing to. It
 to "subscriber_#" where `#` is an increasing index.
 
 # Usage
-Use the blocking `subscribe` method to continually listen to the socket and 
+Use the blocking `subscribe` method to continually listen to the socket and
 store data in a protobuf type:
 
     subscribe(sub::Subscriber, proto_msg::ProtoBuf.ProtoType)
@@ -50,6 +50,10 @@ struct Subscriber
         @catchzmq(
             ZMQ.subscribe(socket),
             "Could not set the socket as a subscriber for subscriber $name."
+        )
+        @catchzmq(
+            set_conflate(socket, 1),
+            "Could not set the conflate option for subscriber $name."
         )
         @catchzmq(
             ZMQ.connect(socket, "tcp://$ipaddr:$port"),
@@ -87,6 +91,13 @@ function receive(
 )
     if isopen(sub)
         bin_data = ZMQ.recv(sub.socket)
+
+        # Forces subscriber to conflate messages
+        # #define ZMQ_POLLIN 1
+        # int event = ZMQ_POLLIN;
+        # zmq_getsockopt(sub, ZMQ_EVENTS, &event, &event_size);
+        ZMQ.getproperty(sub.socket, :events)
+
         io = seek(convert(IOStream, bin_data), 0)
         lock(write_lock) do
             ProtoBuf.readproto(io, proto_msg)
