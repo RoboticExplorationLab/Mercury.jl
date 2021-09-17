@@ -139,7 +139,6 @@ using BenchmarkTools
         Hg.receive(sub, msg)
         second_rec = msg.x
         @test second_rec > first_rec + 10
-        println(second_rec, " ", first_rec)
 
         do_publish = false
         sleep(0.1)

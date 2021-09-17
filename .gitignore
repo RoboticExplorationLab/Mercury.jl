@@ -22,4 +22,6 @@ docs/site/
 # environment.
 Manifest.toml
 
+.DS_Store
+
 .vscode/
