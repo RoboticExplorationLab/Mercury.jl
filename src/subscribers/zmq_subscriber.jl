@@ -52,6 +52,10 @@ struct ZmqSubscriber <: Subscriber
             "Could not set the socket as a subscriber for subscriber $name."
         )
         @catchzmq(
+            set_conflate(socket, 1),
+            "Could not set the conflate option for subscriber $name."
+        )
+        @catchzmq(
             ZMQ.connect(socket, "tcp://$ipaddr:$port"),
             "Could not connect subscriber $name to port $(tcpstring(ipaddr, port))."
         )
@@ -87,6 +91,13 @@ function receive(
 )
     if isopen(sub)
         bin_data = ZMQ.recv(sub.socket)
+
+        # Forces subscriber to conflate messages
+        # #define ZMQ_POLLIN 1
+        # int event = ZMQ_POLLIN;
+        # zmq_getsockopt(sub, ZMQ_EVENTS, &event, &event_size);
+        ZMQ.get_events(sub.socket)
+
         io = seek(convert(IOStream, bin_data), 0)
         lock(write_lock) do
             ProtoBuf.readproto(io, proto_msg)

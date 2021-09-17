@@ -40,7 +40,6 @@ struct ZmqPublisher <: Publisher
             socket = ZMQ.Socket(ctx, ZMQ.PUB),
             "Could not create socket for publisher $name."
         )
-
         @catchzmq(
             ZMQ.bind(socket, "tcp://$ipaddr:$port"),
             "Could not bind publisher $name to $(tcpstring(ipaddr, port))"
