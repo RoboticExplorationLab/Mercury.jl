@@ -26,6 +26,7 @@ mutable struct SerialSubscriber <: Subscriber
         msg_in_buffer = StaticArrays.@MVector zeros(UInt8, msg_block_size)
         msg_in_length = 0
 
+        @info "Subscribing $name on serial port"
         new(serial_port, name, read_buffer, msg_in_buffer, msg_in_length)
     end
 end

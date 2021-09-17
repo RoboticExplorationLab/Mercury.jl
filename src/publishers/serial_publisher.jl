@@ -26,6 +26,7 @@ mutable struct SerialPublisher <: Publisher
         msg_out_buffer = StaticArrays.@MVector zeros(UInt8, msg_block_size)
         msg_out_length = 0
 
+        @info "Publishing $name on serial port"
         new(serial_port, name, msg_out_buffer, msg_out_length)
     end
 end
