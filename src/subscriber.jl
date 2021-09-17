@@ -96,7 +96,7 @@ function receive(
         # #define ZMQ_POLLIN 1
         # int event = ZMQ_POLLIN;
         # zmq_getsockopt(sub, ZMQ_EVENTS, &event, &event_size);
-        ZMQ.get_events(sub.socket)
+        ZMQ.getproperty(sub.socket, :events)
 
         io = seek(convert(IOStream, bin_data), 0)
         lock(write_lock) do
