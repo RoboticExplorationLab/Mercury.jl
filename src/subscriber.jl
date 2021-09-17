@@ -135,7 +135,7 @@ function Base.close(sub::Subscriber)
         Base.close(sub.socket)
     end
 end
-forceclose(sub::Subscriber) = Base.close(sub.socket)
+Base.close(sub::Subscriber) = Base.close(sub.socket)
 getname(sub::Subscriber) = sub.name
 
 function receive(

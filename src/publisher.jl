@@ -74,6 +74,11 @@ function Publisher(
 )
     Publisher(ctx, ipaddr, parse(Int, port), name = name)
 end
+
+function Publisher(pub::Publisher)
+    return pub
+end
+
 Base.isopen(pub::Publisher) = Base.isopen(pub.socket)
 Base.close(pub::Publisher) = Base.close(pub.socket)
 getname(pub::Publisher) = pub.name
