@@ -162,7 +162,7 @@ function subscribe(sub::SerialSubscriber,
         close(sub)
         @info "Shutting Down $(typeof(proto_msg)) subscriber, on: $(sub.name)"
 
-        rethrow(e)
+        @error err exception=(err, catch_backtrace())
     end
 
     return nothing

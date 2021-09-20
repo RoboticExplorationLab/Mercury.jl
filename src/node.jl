@@ -182,12 +182,7 @@ function launch(node::Node)
     rate = getrate(node)
     lrl = LoopRateLimiter(rate)
 
-    # nodeio = getIO(node)
-
-    # # Launch the subscriber tasks asynchronously
-    # for submsg in nodeio.subs
-    #     push!(nodeio.sub_tasks, Threads.@spawn subscribe(submsg))
-    # end
+    # Launch the subscriber tasks asynchronously
     start_subscribers(node)
 
     # Run any necessary startup
@@ -203,14 +198,12 @@ function launch(node::Node)
         end lrl
         @info "Closing node $(getname(node))"
     catch e
-        println("Hello ", @__LINE__)
-        # Close everything
-        closeall(node)
-
         if e isa InterruptException
             @info "Closing node $(getname(node))"
+            # Close everything
+            closeall(node)
         else
-            rethrow(e)
+            @error err exception=(err, catch_backtrace())
         end
     end
 end

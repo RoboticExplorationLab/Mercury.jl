@@ -152,9 +152,8 @@ function subscribe(
     catch err
         close(sub)
         @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
-        @error err exception=(err, catch_backtrace())
         # sub.flags.diderror = true
-        rethrow(err)
+        @error err exception=(err, catch_backtrace())
     end
 
     return nothing
