@@ -19,9 +19,9 @@ struct PublishedMessage
     msg::ProtoBuf.ProtoType
     pub::Publisher
     name::String
-    function PublishedMessage(msg::ProtoBuf.ProtoType, pub::Publisher; name=Publishers.getname(pub))
+    function PublishedMessage(msg::ProtoBuf.ProtoType, pub::Publisher; name=getname(pub))
         new(msg, pub, name)
     end
 end
-publish(pubmsg::PublishedMessage) = Publishers.publish(pubmsg.pub, pubmsg.msg)
+publish(pubmsg::PublishedMessage) = publish(pubmsg.pub, pubmsg.msg)
 getname(pubmsg::PublishedMessage) = pubmsg.name

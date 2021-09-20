@@ -94,11 +94,12 @@ function Subscriber(sub::ZmqSubscriber)
     return sub
 end
 
-Base.isopen(sub::ZmqSubscriber) = Base.isopen(sub.socket)
+Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
 
 function Base.close(sub::ZmqSubscriber)
     lock(sub.socket_lock) do
-        Base.close(sub.socket)
+        @info "Closing ZmqSubscriber: $(getname(sub))"
+        close(sub.socket)
     end
 end
 
@@ -114,17 +115,18 @@ end
 function receive(
     sub::ZmqSubscriber,
     proto_msg::ProtoBuf.ProtoType,
-    write_lock = ReentrantLock(),
+    write_lock::ReentrantLock,
 )
     if isopen(sub)
         local bin_data
-        # bin_data = ZMQ.Message()
-        # lock(sub.socket_lock) do
-            # ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
+
+        lock(sub.socket_lock) do
             bin_data = ZMQ.recv(sub.socket)
+
             # Forces subscriber to conflate messages
             ZMQ.getproperty(sub.socket, :events)
-        # end
+        end
+
         # Why not just call IOBuffer(bin_data)?
         io = seek(convert(IOStream, bin_data), 0)
         lock(write_lock) do
@@ -136,9 +138,10 @@ end
 function subscribe(
     sub::ZmqSubscriber,
     proto_msg::ProtoBuf.ProtoType,
-    write_lock = ReentrantLock(),
+    write_lock::ReentrantLock,
 )
     @info "$(sub.name): Listening for message type: $(typeof(proto_msg)), on: $(tcpstring(sub))"
+
     try
         while isopen(sub)
             receive(sub, proto_msg, write_lock)

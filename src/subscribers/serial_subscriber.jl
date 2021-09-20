@@ -125,7 +125,7 @@ Returns `true` if successfully read message from serial port
 """
 function receive(sub::SerialSubscriber,
                  proto_msg::ProtoBuf.ProtoType,
-                 write_lock = ReentrantLock(),
+                 write_lock::ReentrantLock,
                  )
     if isopen(sub)
         encoded_msg = readuntil(sub, 0x00)
@@ -149,7 +149,7 @@ Loops recieve(sub::Subscriber, proto_msg::ProtoBuf.ProtoType, write_lock=Reentra
 """
 function subscribe(sub::SerialSubscriber,
                    proto_msg::ProtoBuf.ProtoType,
-                   write_lock = ReentrantLock(),
+                   write_lock::ReentrantLock,
                    )
     @info "$(sub.name): Listening for message type: $(typeof(proto_msg)), on: $(sub.name)"
     try

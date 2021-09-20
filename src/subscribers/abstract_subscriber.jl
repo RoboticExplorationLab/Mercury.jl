@@ -7,13 +7,13 @@ getname(sub::Subscriber)::String = sub.name
 
 function receive(sub::Subscriber,
                  proto_msg::ProtoBuf.ProtoType,
-                 write_lock = ReentrantLock())::Nothing
+                 write_lock::ReentrantLock)::Nothing
     error("The `receive` method hasn't been implemented for your Subscriber yet!")
 end
 
 function subscribe(sub::Subscriber,
                    proto_msg::ProtoBuf.ProtoType,
-                   write_lock = ReentrantLock())::Nothing
+                   write_lock::ReentrantLock)::Nothing
     error("The `subscribe` method hasn't been implemented for your Subscriber yet!")
 end
 
@@ -27,13 +27,11 @@ struct SubscribedMessage
     sub::Subscriber
     lock::ReentrantLock
     name::String
-    function SubscribedMessage(msg::ProtoBuf.ProtoType, sub::Subscriber; name=Subscribers.getname(sub))
+    function SubscribedMessage(msg::ProtoBuf.ProtoType, sub::Subscriber; name=getname(sub))
         new(msg, sub,
         ReentrantLock(),
         name)
     end
 end
-subscribe(submsg::SubscribedMessage) = Subscribers.subscribe(submsg.sub, submsg.msg,
-                                                             submsg.lock
-                                                             )
+subscribe(submsg::SubscribedMessage) = subscribe(submsg.sub, submsg.msg, submsg.lock)
 getname(submsg::SubscribedMessage) = submsg.name

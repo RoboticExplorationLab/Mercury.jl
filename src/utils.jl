@@ -1,3 +1,36 @@
+ZMQ_CONFLATE = 54
+
+# Set conflate option for ZMQ, not included in ZMQ.jl
+function set_conflate(socket::ZMQ.Socket, option_val::Integer)
+    rc = ccall(
+        (:zmq_setsockopt, ZMQ.libzmq),
+        Cint,
+        (Ptr{Cvoid}, Cint, Ref{Cint}, Csize_t),
+        socket,
+        ZMQ_CONFLATE,
+        option_val,
+        sizeof(Cint),
+    )
+    if rc != 0
+        throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
+    end
+end
+# Get the conflate option for ZMQ, not included in ZMQ.jl
+function get_conflate(socket::ZMQ.Socket, option_val::Integer)
+    rc = ccall(
+        (:zmq_getsockopt, ZMQ.libzmq),
+        Cint,
+        (Ptr{Cvoid}, Cint, Ref{Cint}, Csize_t),
+        socket,
+        ZMQ_CONFLATE,
+        option_val,
+        sizeof(Cint),
+    )
+    if rc != 0
+        throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
+    end
+end
+
 NUM_PUBS = 1;
 function genpublishername()
     global NUM_PUBS
@@ -5,6 +38,7 @@ function genpublishername()
     NUM_PUBS += 1
     return name
 end
+
 NUM_SUBS = 1;
 function gensubscribername()
     global NUM_SUBS
@@ -12,6 +46,10 @@ function gensubscribername()
     NUM_SUBS += 1
     return name
 end
+
+reset_sub_count() = global NUM_SUBS = 1
+reset_pub_count() = global NUM_PUBS = 1
+
 
 macro catchzmq(expr, errmsg)
     ex = quote

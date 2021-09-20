@@ -9,12 +9,16 @@ I/O mechanisms are added to a `NodeIO` object via [`add_publisher!`](@ref) and
 [`add_subscriber!`](@ref).
 """
 struct NodeIO
+    ctx::Union{Nothing,ZMQ.Context}
     pubs::Vector{PublishedMessage}
     subs::Vector{SubscribedMessage}
     sub_tasks::Vector{Task}
 
+    function NodeIO(ctx::ZMQ.Context)
+        new(ctx, PublishedMessage[], SubscribedMessage[], Task[])
+    end
     function NodeIO()
-        new(PublishedMessage[], SubscribedMessage[], Task[])
+        new(nothing, PublishedMessage[], SubscribedMessage[], Task[])
     end
 end
 
@@ -56,9 +60,9 @@ Inside of `compute`:
     ...
 
 """
-function add_publisher!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, args...)
-    push!(nodeio.pubs, PublishedMessage(msg, Publisher(args...)))
-end
+# function add_publisher!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, args...)
+#     push!(nodeio.pubs, PublishedMessage(msg, ZmqPublisher(args...)))
+# end
 function add_publisher!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, pub::Publisher)
     push!(nodeio.pubs, PublishedMessage(msg, pub))
 end
@@ -108,9 +112,9 @@ In `compute`:
     # use node.local_test_msg in the rest of the code
     ...
 """
-function add_subscriber!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, args...)
-    push!(nodeio.subs, SubscribedMessage(msg, Subscriber(args...)))
-end
+# function add_subscriber!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, args...)
+#     push!(nodeio.subs, SubscribedMessage(msg, ZmqSubscriber(args...)))
+# end
 function add_subscriber!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, sub::Subscriber)
     push!(nodeio.subs, SubscribedMessage(msg, sub))
 end
@@ -158,7 +162,7 @@ setupIO!(::Node, ::NodeIO) =
 
 # These methods can be overwritten as needed
 startup(::Node)::Nothing = nothing
-
+getcontext(node::Node)::Union{Nothing, ZMQ.Context} = getIO(node).ctx
 getrate(node::Node)::Float64 = node.rate
 getIO(node::Node)::NodeIO = node.nodeio
 function isnodedone(node::Node)::Bool
@@ -178,16 +182,11 @@ end
 using Base.Threads
 
 function launch(node::Node)
-
     rate = getrate(node)
     lrl = LoopRateLimiter(rate)
 
     # Launch the subscriber tasks asynchronously
     start_subscribers(node)
-
-    while true
-        sleep(0.001)
-    end
 
     # Run any necessary startup
     startup(node)
@@ -195,14 +194,13 @@ function launch(node::Node)
     try
         @rate while !isnodedone(node)
             compute(node)
-            println("Got to: ", @__LINE__)
 
             GC.gc(false)
             yield()
         end lrl
         @info "Closing node $(getname(node))"
-    catch e
-        if e isa InterruptException
+    catch err
+        if err isa InterruptException
             @info "Closing node $(getname(node))"
             # Close everything
             closeall(node)
@@ -216,13 +214,14 @@ function start_subscribers(node::Node)
     nodeio = getIO(node)
 
     for submsg in nodeio.subs
-        curr_task = @task Subscribers.subscribe(submsg)
-        schedule(curr_task)
-        push!(nodeio.sub_tasks, curr_task)
+        sub_task = @async subscribe(submsg)
+        push!(nodeio.sub_tasks, sub_task)
     end
 end
 
 function closeall(node::Node)
+    @info "Closing down all of $(getname(node))'s NodeIO connections"
+
     nodeio = getIO(node)
     # Close publishers and subscribers
     for submsg in nodeio.subs
@@ -238,6 +237,12 @@ function closeall(node::Node)
     empty!(nodeio.sub_tasks)
 
     return nothing
+end
+
+function node_sockets_are_open(node::Node)
+    nodeio = getIO(node)
+    return (all([isopen(submsg.sub) for submsg in nodeio.subs]) &&
+            all([isopen(pubmsg.pub) for pubmsg in nodeio.pubs]))
 end
 
 # function forceclose_sub_tasks(node::Node)

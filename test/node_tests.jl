@@ -21,7 +21,7 @@ function PubNode()
 end
 
 function Hg.setupIO!(node::PubNode, nodeio::Hg.NodeIO)
-    ctx = node.ctx 
+    ctx = node.ctx
     addr = ip"127.0.0.1"
     port = 5555
     Hg.add_publisher!(nodeio, node.test_msg, ctx, addr, port)

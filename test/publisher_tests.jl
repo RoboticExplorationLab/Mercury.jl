@@ -16,7 +16,7 @@ using BenchmarkTools
 
         pub.port == port
         pub.ipaddr == addr
-        Hg.Publishers.tcpstring(pub) == "tcp://$addr:$port"
+        Hg.tcpstring(pub) == "tcp://$addr:$port"
         pub.name == "publisher_1"
         isopen(pub)
 
