@@ -37,6 +37,7 @@ struct ZmqSubscriber <: Subscriber
     buffer::IOBuffer
     name::String
     socket_lock::ReentrantLock
+    flags::SubscriberFlags
 
     function ZmqSubscriber(
         ctx::ZMQ.Context,
@@ -70,6 +71,7 @@ struct ZmqSubscriber <: Subscriber
             IOBuffer(),
             name,
             ReentrantLock(),
+            SubscriberFlags(),
         )
     end
 end
@@ -103,29 +105,23 @@ function Base.close(sub::ZmqSubscriber)
     end
 end
 
-function forceclose(sub::ZmqSubscriber)
-    # Check if the lock is avalible
-    if trylock(sub.socket_lock)
-        close(sub)
-    else
-        throw(InterruptException())
-    end
-end
-
 function receive(
     sub::ZmqSubscriber,
     proto_msg::ProtoBuf.ProtoType,
     write_lock::ReentrantLock,
 )
     if isopen(sub)
-        local bin_data
+        sub.flags.isreceiving = true
 
+        local bin_data
         lock(sub.socket_lock) do
             bin_data = ZMQ.recv(sub.socket)
-
+            # Once blocking is finished we know we've recieved a new message
+            sub.flags.hasreceived = true
             # Forces subscriber to conflate messages
             ZMQ.getproperty(sub.socket, :events)
         end
+        sub.flags.isreceiving = false
 
         # Why not just call IOBuffer(bin_data)?
         io = seek(convert(IOStream, bin_data), 0)
@@ -150,6 +146,7 @@ function subscribe(
         end
         @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
     catch err
+        sub.flags.diderror = true
         close(sub)
         @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
         @error err exception=(err, catch_backtrace())
