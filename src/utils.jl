@@ -1,4 +1,3 @@
-
 NUM_PUBS = 1;
 function genpublishername()
     global NUM_PUBS
@@ -28,8 +27,20 @@ macro catchzmq(expr, errmsg)
     return esc(ex)
 end
 
-reset_pub_count() = global NUM_PUBS = 1
-reset_sub_count() = global NUM_SUBS = 1
+
+macro catchserial(expr, errmsg)
+    ex = quote
+        try
+            $expr
+        catch e
+            if e isa ErrorException
+                @error $errmsg * "\n"
+            end
+            rethrow(e)
+        end
+    end
+    return esc(ex)
+end
 
 tcpstring(ipaddr, port) = "tcp://" * string(ipaddr) * ":" * string(port)
 
@@ -47,14 +58,14 @@ end
     LoopRateLimiter
 
 Runs a loop at a fixed rate. Works best for loops where the runtime is approximately
-the same every iteration. The loop runtime is kept approximately constant by sleeping 
-for any time not used by the core computation. This is useful for situations where 
+the same every iteration. The loop runtime is kept approximately constant by sleeping
+for any time not used by the core computation. This is useful for situations where
 the computation should take place a regular, predictable intervals.
 
-To achieve better accuracy, the rate limiter records the error between the expected 
-runtime and actual runtime every `N_batch` iterations, and adjusts the sleep time 
-by the average. Unlike the standard sleep function in Julia, this limiter has a 
-minimum sleep time of 1 microsecond, and rates above 1000Hz can be achieved with 
+To achieve better accuracy, the rate limiter records the error between the expected
+runtime and actual runtime every `N_batch` iterations, and adjusts the sleep time
+by the average. Unlike the standard sleep function in Julia, this limiter has a
+minimum sleep time of 1 microsecond, and rates above 1000Hz can be achieved with
 moderate accuracy.
 
 # Example
@@ -118,7 +129,7 @@ end
 """
     sleep(::LoopRateLimiter)
 
-Sleep the OS for the amount of time needed to achieve the rate specified by the loop rate 
+Sleep the OS for the amount of time needed to achieve the rate specified by the loop rate
 limiter. Has a minimum sleep time of 1 microsecond (relies on the `usleep` C function).
 """
 function Base.sleep(lrl::LoopRateLimiter)
@@ -143,8 +154,8 @@ end
 """
     @rate
 
-Run a loop at a fixed rate, specified either by an integer literal or a 
-`LoopRateLimiter` object. It will run the loop so that it executes close 
+Run a loop at a fixed rate, specified either by an integer literal or a
+`LoopRateLimiter` object. It will run the loop so that it executes close
 to `rate` iterations per second.
 
 # Examples
@@ -167,7 +178,7 @@ Note that the following does NOT work:
 rate = 100
 @rate for i = 1:100
     myexpensivefunction()
-end rate 
+end rate
 ```
 Since Julia macros dispatch on the compile-time types instead of the run-time types.
 """

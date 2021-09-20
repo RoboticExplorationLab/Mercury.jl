@@ -1,24 +1,5 @@
 """
-    SubscriberFlags
-
-Some useful flags when dealing with subscribers. Describes the state of the system.
-Particularly helpful when the subscriber is actively receiving messages in another
-thread and you want to query the state of the subscriber.
-"""
-Base.@kwdef mutable struct SubscriberFlags
-    "Is the subscriber currently waiting to receive data"
-    isreceiving::Bool = false
-
-    "Did the subscriber exit with an error"
-    diderror::Bool = false
-
-    "Has the subscriber received a message"
-    hasreceived::Bool = false
-end
-
-
-"""
-    Subscriber
+    ZmqSubscriber
 
 A simple wrapper around a ZMQ subscriber, but only for protobuf messages.
 
@@ -49,7 +30,7 @@ sub_task = @task subscribe(sub, proto_msg)
 schedule(sub_task)
 ```
 """
-struct Subscriber
+struct ZmqSubscriber <: Subscriber
     socket::ZMQ.Socket
     port::Int64
     ipaddr::Sockets.IPv4
@@ -57,8 +38,8 @@ struct Subscriber
     name::String
     socket_lock::ReentrantLock
     flags::SubscriberFlags
-    rate_info::RateInfo
-    function Subscriber(
+
+    function ZmqSubscriber(
         ctx::ZMQ.Context,
         ipaddr::Sockets.IPv4,
         port::Integer;
@@ -69,23 +50,10 @@ struct Subscriber
             socket = ZMQ.Socket(ctx, ZMQ.SUB),
             "Could not create socket for subscriber $name."
         )
-        # @catchzmq(
-        #     ZMQ._set_rcvhwm(socket, 1),
-        #     "Could not set high water mark for subscriber $name."
-        # )
-
-        # @catchzmq(
-        #     set_conflate(socket, 1),
-        #     "Could not set the conflate option for subscriber $name."
-        # )
-        # println("Set conflate option to true")
-
         @catchzmq(
             ZMQ.subscribe(socket),
             "Could not set the socket as a subscriber for subscriber $name."
         )
-
-
         @catchzmq(
             set_conflate(socket, 1),
             "Could not set the conflate option for subscriber $name."
@@ -104,118 +72,120 @@ struct Subscriber
             name,
             ReentrantLock(),
             SubscriberFlags(),
-            RateInfo(),
         )
     end
 end
 
-function Subscriber(ctx::ZMQ.Context, ipaddr, port::Integer; name = gensubscribername())
+function ZmqSubscriber(ctx::ZMQ.Context, ipaddr, port::Integer; name = gensubscribername())
     if !(ipaddr isa Sockets.IPv4)
         ipaddr = Sockets.IPv4(ipaddr)
     end
-    Subscriber(ctx, ipaddr, port, name = name)
+    ZmqSubscriber(ctx, ipaddr, port, name = name)
 end
 
-function Subscriber(
+function ZmqSubscriber(
     ctx::ZMQ.Context,
     ipaddr,
     port::AbstractString;
     name = gensubscribername(),
 )
-    Subscriber(ctx, ipaddr, parse(Int, port), name = name)
+    ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
 
-function Subscriber(sub::Subscriber)
+function Subscriber(sub::ZmqSubscriber)
     return sub
 end
 
-Base.isopen(sub::Subscriber) = Base.isopen(sub.socket)
-function Base.close(sub::Subscriber)
+Base.isopen(sub::ZmqSubscriber) = Base.isopen(sub.socket)
+
+function Base.close(sub::ZmqSubscriber)
     lock(sub.socket_lock) do
         Base.close(sub.socket)
     end
 end
-Base.close(sub::Subscriber) = Base.close(sub.socket)
-getname(sub::Subscriber) = sub.name
+
+function forceclose(sub::ZmqSubscriber)
+    # Check if the lock is avalible
+    if trylock(sub.socket_lock)
+        close(sub)
+    else
+        throw(InterruptException())
+    end
+end
 
 function receive(
-    sub::Subscriber,
+    sub::ZmqSubscriber,
     proto_msg::ProtoBuf.ProtoType,
     write_lock = ReentrantLock(),
 )
     if isopen(sub)
-        sub.flags.isreceiving = true
-        # local bin_data
-        bin_data = ZMQ.Message()
+        # sub.flags.isreceiving = true
+        local bin_data
+        # bin_data = ZMQ.Message()
         lock(sub.socket_lock) do
             # ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
             bin_data = ZMQ.recv(sub.socket)
             # Forces subscriber to conflate messages
             ZMQ.getproperty(sub.socket, :events)
         end
-        sub.flags.isreceiving = false
-        sub.flags.hasreceived = true
         # Why not just call IOBuffer(bin_data)?
         io = seek(convert(IOStream, bin_data), 0)
         lock(write_lock) do
             ProtoBuf.readproto(io, proto_msg)
         end
-
-        printrate(sub.rate_info)
     end
 end
 
 function subscribe(
-    sub::Subscriber,
+    sub::ZmqSubscriber,
     proto_msg::ProtoBuf.ProtoType,
     write_lock = ReentrantLock(),
 )
-    @info "Listening for message type: $(typeof(proto_msg)), on: $(tcpstring(sub))"
-    init(sub.rate_info, getname(sub))
+    @info "$(sub.name): Listening for message type: $(typeof(proto_msg)), on: $(tcpstring(sub))"
     try
         while isopen(sub)
             receive(sub, proto_msg, write_lock)
-            GC.gc(false)  # TODO(bjack205)[#8] Is this needed?
-            # sleep(0.001)
+            GC.gc(false)
             yield()
         end
         @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
-    catch e
+    catch err
         close(sub)
-        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Got error $(typeof(e))."
-        sub.flags.diderror = true
-        rethrow(e)
+        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
+        @error err exception=(err, catch_backtrace())
+        # sub.flags.diderror = true
+        rethrow(err)
     end
 
     return nothing
 end
 
-"""
-    publish_until_receive(pub, sub, msg_out; [timeout])
+tcpstring(sub::ZmqSubscriber) = tcpstring(sub.ipaddr, sub.port)
 
-Publish a message via the publisher `pub` until it's received by the subscriber `sub`.
-Both `pub` and `sub` should have the same port and IP address.
+# """
+#     publish_until_receive(pub, sub, msg_out; [timeout])
 
-The function returns `true` if a message was received before `timeout` seconds have passed,
-    and `false` otherwise.
-"""
-function publish_until_receive(
-    pub::Publisher,
-    sub::Subscriber,
-    msg_out::ProtoBuf.ProtoType,
-    timeout = 1.0,  # seconds
-)
-    @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"
-    t_start = time()
-    sub.flags.hasreceived = false
-    while (time() - t_start < timeout)
-        publish(pub, msg_out)
-        sleep(0.001)
-        if sub.flags.hasreceived
-            return true
-        end
-    end
-    return false
-end
+# Publish a message via the publisher `pub` until it's received by the subscriber `sub`.
+# Both `pub` and `sub` should have the same port and IP address.
 
-tcpstring(sub::Subscriber) = tcpstring(sub.ipaddr, sub.port)
+# The function returns `true` if a message was received before `timeout` seconds have passed,
+#     and `false` otherwise.
+# """
+# function publish_until_receive(
+#     pub::ZmqPublisher,
+#     sub::ZmqSubscriber,
+#     msg_out::ProtoBuf.ProtoType,
+#     timeout = 1.0,  # seconds
+# )
+#     @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"
+#     t_start = time()
+#     sub.flags.hasreceived = false
+#     while (time() - t_start < timeout)
+#         publish(pub, msg_out)
+#         sleep(0.001)
+#         if sub.flags.hasreceived
+#             return true
+#         end
+#     end
+#     return false
+# end

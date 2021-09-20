@@ -1,26 +1,3 @@
-struct PublishedMessage
-    msg::ProtoBuf.ProtoType
-    pub::Publisher
-    name::String
-    function PublishedMessage(msg::ProtoBuf.ProtoType, pub::Publisher; name=getname(pub))
-        new(msg, pub, name)
-    end
-end
-publish(pubmsg::PublishedMessage) = publish(pubmsg.pub, pubmsg.msg)
-getname(pubmsg::PublishedMessage) = pubmsg.name
-
-struct SubscribedMessage
-    msg::ProtoBuf.ProtoType  # Note this is an abstract type
-    sub::Subscriber
-    lock::ReentrantLock
-    name::String
-    function SubscribedMessage(msg::ProtoBuf.ProtoType, sub::Subscriber; name=getname(sub))
-        new(msg, sub, ReentrantLock(), name)
-    end
-end
-subscribe(submsg::SubscribedMessage) = subscribe(submsg.sub, submsg.msg, submsg.lock)
-getname(submsg::SubscribedMessage) = submsg.name
-
 """
     NodeIO
 
@@ -35,6 +12,7 @@ struct NodeIO
     pubs::Vector{PublishedMessage}
     subs::Vector{SubscribedMessage}
     sub_tasks::Vector{Task}
+
     function NodeIO()
         new(PublishedMessage[], SubscribedMessage[], Task[])
     end
@@ -80,6 +58,9 @@ Inside of `compute`:
 """
 function add_publisher!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, args...)
     push!(nodeio.pubs, PublishedMessage(msg, Publisher(args...)))
+end
+function add_publisher!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, pub::Publisher)
+    push!(nodeio.pubs, PublishedMessage(msg, pub))
 end
 
 """
@@ -130,7 +111,9 @@ In `compute`:
 function add_subscriber!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, args...)
     push!(nodeio.subs, SubscribedMessage(msg, Subscriber(args...)))
 end
-
+function add_subscriber!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, sub::Subscriber)
+    push!(nodeio.subs, SubscribedMessage(msg, sub))
+end
 
 
 """
@@ -177,8 +160,13 @@ setupIO!(::Node, ::NodeIO) =
 startup(::Node)::Nothing = nothing
 
 getrate(node::Node)::Float64 = node.rate
-getoptions(node::Node)::NodeOptions = node.options
 getIO(node::Node)::NodeIO = node.nodeio
+function isnodedone(node::Node)::Bool
+    nodeio = getIO(node)
+    finished_sub = any(istaskdone.(nodeio.sub_tasks))
+
+    return node.should_finish || finished_sub
+end
 
 function getname(::T) where {T <: Node}
     # Note that this only works well when each node is only instantiated once
@@ -194,12 +182,13 @@ function launch(node::Node)
     rate = getrate(node)
     lrl = LoopRateLimiter(rate)
 
-    nodeio = getIO(node)::NodeIO
+    # nodeio = getIO(node)
 
-    # Launch the subscriber tasks asynchronously
-    for submsg in nodeio.subs
-        push!(nodeio.sub_tasks, Threads.@spawn subscribe(submsg))
-    end
+    # # Launch the subscriber tasks asynchronously
+    # for submsg in nodeio.subs
+    #     push!(nodeio.sub_tasks, Threads.@spawn subscribe(submsg))
+    # end
+    start_subscribers(node)
 
     # Run any necessary startup
     startup(node)
@@ -207,12 +196,14 @@ function launch(node::Node)
     try
         @rate while !isnodedone(node)
             compute(node)
+            println("Got to: ", @__LINE__)
 
             GC.gc(false)
             yield()
         end lrl
         @info "Closing node $(getname(node))"
     catch e
+        println("Hello ", @__LINE__)
         # Close everything
         closeall(node)
 
@@ -221,6 +212,14 @@ function launch(node::Node)
         else
             rethrow(e)
         end
+    end
+end
+
+function start_subscribers(node::Node)
+    nodeio = getIO(node)
+
+    for submsg in nodeio.subs
+        push!(nodeio.sub_tasks, Threads.@spawn subscribe(submsg))
     end
 end
 
@@ -241,3 +240,22 @@ function closeall(node::Node)
 
     return nothing
 end
+
+# function forceclose_sub_tasks(node::Node)
+#     nodeio = getIO(node)
+
+#     for subtask in nodeio.sub_tasks
+#         Base.throwto(subtask, InterruptException())
+#         wait(subtask)
+#     end
+
+#     return nothing
+# end
+
+# function check_subscribers_open(node::Node)
+#     nodeio = getIO(node)
+
+#     for submsg in nodeio.subs
+#         push!(nodeio.sub_tasks, Threads.@spawn subscribe(submsg))
+#     end
+# end
