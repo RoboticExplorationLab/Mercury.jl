@@ -185,6 +185,10 @@ function launch(node::Node)
     # Launch the subscriber tasks asynchronously
     start_subscribers(node)
 
+    while true
+        sleep(0.001)
+    end
+
     # Run any necessary startup
     startup(node)
 
@@ -212,7 +216,9 @@ function start_subscribers(node::Node)
     nodeio = getIO(node)
 
     for submsg in nodeio.subs
-        push!(nodeio.sub_tasks, Threads.@spawn subscribe(submsg))
+        curr_task = @task Subscribers.subscribe(submsg)
+        schedule(curr_task)
+        push!(nodeio.sub_tasks, curr_task)
     end
 end
 

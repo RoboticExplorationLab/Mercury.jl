@@ -19,26 +19,6 @@ end
 
 
 """
-    SubscriberFlags
-Some useful flags when dealing with subscribers. Describes the state of the system.
-Particularly helpful when the subscriber is actively receiving messages in another
-thread and you want to query the state of the subscriber.
-"""
-Base.@kwdef mutable struct SubscriberFlags
-    "Is the subscriber currently waiting to receive data"
-    isreceiving::Bool = false
-
-    "Did the subscriber exit with an error"
-    diderror::Bool = false
-
-    "Has the subscriber received a message"
-    hasreceived::Bool = false
-end
-
-getflags(sub::Subscriber)::SubscriberFlags = sub.flags
-
-
-"""
 Specifies a subcriber along with specific message type.
 This is useful for tracking multiple messages at once
 """
@@ -48,8 +28,12 @@ struct SubscribedMessage
     lock::ReentrantLock
     name::String
     function SubscribedMessage(msg::ProtoBuf.ProtoType, sub::Subscriber; name=Subscribers.getname(sub))
-        new(msg, sub, ReentrantLock(), name)
+        new(msg, sub,
+        ReentrantLock(),
+        name)
     end
 end
-subscribe(submsg::SubscribedMessage) = Subscribers.subscribe(submsg.sub, submsg.msg, submsg.lock)
+subscribe(submsg::SubscribedMessage) = Subscribers.subscribe(submsg.sub, submsg.msg,
+                                                             submsg.lock
+                                                             )
 getname(submsg::SubscribedMessage) = submsg.name
