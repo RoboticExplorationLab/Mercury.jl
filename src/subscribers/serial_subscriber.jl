@@ -144,6 +144,8 @@ function receive(sub::SerialSubscriber,
             lock(write_lock) do
                 ProtoBuf.readproto(IOBuffer(decoded_msg), proto_msg)
             end
+            # @info "Recieved message"
+
             sub.flags.hasreceived = true
             return true
         end
@@ -163,7 +165,7 @@ function subscribe(sub::SerialSubscriber,
                    )
     @info "$(sub.name): Listening for message type: $(typeof(proto_msg)), on: $(sub.name)"
     try
-        while true
+        while isopen(sub)
             receive(sub, proto_msg, write_lock)
             GC.gc(false)
             yield()
