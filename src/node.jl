@@ -189,8 +189,8 @@ function launch(node::Node)
     # Run any necessary startup
     startup(node)
 
-    cnt = 0
-    start_time = time()
+    # cnt = 0
+    # start_time = time()
 
     try
         @rate while !isnodedone(node)
@@ -199,12 +199,12 @@ function launch(node::Node)
             GC.gc(false)
             yield()
 
-            cnt += 1
-            if cnt % 1000 == 0
-                end_time = time()
-                println(1000 / (end_time - start_time))
-                start_time = time()
-            end
+            # cnt += 1
+            # if cnt % 1000 == 0
+            #     end_time = time()
+            #     println(1000 / (end_time - start_time))
+            #     start_time = time()
+            # end
 
         end lrl
         @info "Closing node $(getname(node))"
