@@ -76,7 +76,11 @@ end
 """
 function on_new(func::Function, submsg::SubscribedMessage)
     if has_new(submsg.sub)
-        func(submsg.msg)
+        # TODO: is lock needed here
+        # Lock Message while performing operations on it
+        # lock(submsg.lock) do
+            func(submsg.msg)
+        # end
         got_new!(submsg.sub)
     end
 end

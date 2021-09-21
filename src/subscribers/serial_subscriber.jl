@@ -44,6 +44,7 @@ function SerialSubscriber(port_name::String,
                           baudrate::Int64;
                           name = gensubscribername(),
                           )
+    local sp
     @catchserial(
         begin
             sp = LibSerialPort.open(port_name, baudrate)
@@ -168,7 +169,7 @@ function subscribe(sub::SerialSubscriber,
             yield()
         end
         @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
-    catch e
+    catch err
         sub.flags.diderror = true
         close(sub)
         @warn "Shutting Down $(typeof(proto_msg)) subscriber, on: $(sub.name)"
