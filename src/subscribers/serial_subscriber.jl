@@ -44,6 +44,7 @@ function SerialSubscriber(port_name::String,
                           baudrate::Int64;
                           name = gensubscribername(),
                           )
+    local sp
     @catchserial(
         begin
             sp = LibSerialPort.open(port_name, baudrate)
@@ -143,6 +144,8 @@ function receive(sub::SerialSubscriber,
             lock(write_lock) do
                 ProtoBuf.readproto(IOBuffer(decoded_msg), proto_msg)
             end
+            # @info "Recieved message"
+
             sub.flags.hasreceived = true
             return true
         end
@@ -162,12 +165,12 @@ function subscribe(sub::SerialSubscriber,
                    )
     @info "$(sub.name): Listening for message type: $(typeof(proto_msg)), on: $(sub.name)"
     try
-        while true
+        while isopen(sub)
             receive(sub, proto_msg, write_lock)
             GC.gc(false)
             yield()
         end
-        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
+        @warn "Shutting Down subscriber $(getname(sub)). Socket was closed."
     catch e
         sub.flags.diderror = true
         close(sub)

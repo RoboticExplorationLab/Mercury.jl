@@ -179,9 +179,6 @@ function getname(::T) where {T <: Node}
 end
 
 # These methods should not be changed
-
-using Base.Threads
-
 function launch(node::Node)
     rate = getrate(node)
     lrl = LoopRateLimiter(rate)
@@ -192,12 +189,23 @@ function launch(node::Node)
     # Run any necessary startup
     startup(node)
 
+    cnt = 0
+    start_time = time()
+
     try
         @rate while !isnodedone(node)
             compute(node)
 
             GC.gc(false)
             yield()
+
+            cnt += 1
+            if cnt % 1000 == 0
+                end_time = time()
+                println(1000 / (end_time - start_time))
+                start_time = time()
+            end
+
         end lrl
         @info "Closing node $(getname(node))"
     catch err
