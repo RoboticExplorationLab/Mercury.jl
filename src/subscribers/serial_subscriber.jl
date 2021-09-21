@@ -11,13 +11,15 @@ mutable struct SerialSubscriber <: Subscriber
     msg_in_buffer::StaticArrays.MVector{msg_block_size, UInt8}
     msg_in_length::Int64
 
+    flags::SubscriberFlags
+
     function SerialSubscriber(serial_port::LibSerialPort.SerialPort;
-                            name = gensubscribername(),
-                            )
+                              name = gensubscribername(),
+                              )
         @catchserial(LibSerialPort.open(serial_port),
                     "Failed to connect to serial port: `$serial_port`"
                     )
-        close(serial_port)
+        # close(serial_port)
 
         # Buffer for dumping read bytes into
         read_buffer = StaticArrays.@MVector zeros(UInt8, serial_port_buffer_size)
@@ -27,7 +29,14 @@ mutable struct SerialSubscriber <: Subscriber
         msg_in_length = 0
 
         @info "Subscribing $name on serial port"
-        new(serial_port, name, read_buffer, msg_in_buffer, msg_in_length)
+        new(
+            serial_port,
+            name,
+            read_buffer,
+            msg_in_buffer,
+            msg_in_length,
+            SubscriberFlags(),
+            )
     end
 end
 
@@ -35,8 +44,13 @@ function SerialSubscriber(port_name::String,
                           baudrate::Int64;
                           name = gensubscribername(),
                           )
-    sp = LibSerialPort.open(port_name, baudrate)
-    LibSerialPort.close(sp)
+    @catchserial(
+        begin
+            sp = LibSerialPort.open(port_name, baudrate)
+            LibSerialPort.close(sp)
+        end,
+        "Failed to connect to serial port at: `$port_name`"
+        )
 
     return SerialSubscriber(sp; name = name)
 end
@@ -44,14 +58,6 @@ end
 
 Base.isopen(sub::SerialSubscriber) = LibSerialPort.isopen(sub.serial_port)
 Base.close(sub::SerialSubscriber) = LibSerialPort.close(sub.serial_port)
-
-function Base.open(sub::SerialSubscriber)
-    if !isopen(sub)
-        LibSerialPort.open(sub.serial_port)
-    end
-
-    return Base.isopen(sub)
-end
 
 
 """
@@ -128,13 +134,16 @@ function receive(sub::SerialSubscriber,
                  write_lock::ReentrantLock,
                  )
     if isopen(sub)
+        sub.flags.isreceiving = true
         encoded_msg = readuntil(sub, 0x00)
+        sub.flags.isreceiving = false
 
         if encoded_msg !== nothing
             decoded_msg = decode(sub, encoded_msg)
             lock(write_lock) do
                 ProtoBuf.readproto(IOBuffer(decoded_msg), proto_msg)
             end
+            sub.flags.hasreceived = true
             return true
         end
 
@@ -155,13 +164,14 @@ function subscribe(sub::SerialSubscriber,
     try
         while true
             receive(sub, proto_msg, write_lock)
-
             GC.gc(false)
+            yield()
         end
+        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
     catch e
+        sub.flags.diderror = true
         close(sub)
-        @info "Shutting Down $(typeof(proto_msg)) subscriber, on: $(sub.name)"
-
+        @warn "Shutting Down $(typeof(proto_msg)) subscriber, on: $(sub.name)"
         @error err exception=(err, catch_backtrace())
     end
 

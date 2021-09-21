@@ -10,6 +10,7 @@ I/O mechanisms are added to a `NodeIO` object via [`add_publisher!`](@ref) and
 """
 struct NodeIO
     ctx::Union{Nothing,ZMQ.Context}
+    # sp::Union{Nothing,LibSerialPort.SerialPort}
     pubs::Vector{PublishedMessage}
     subs::Vector{SubscribedMessage}
     sub_tasks::Vector{Task}
@@ -244,22 +245,3 @@ function node_sockets_are_open(node::Node)
     return (all([isopen(submsg.sub) for submsg in nodeio.subs]) &&
             all([isopen(pubmsg.pub) for pubmsg in nodeio.pubs]))
 end
-
-# function forceclose_sub_tasks(node::Node)
-#     nodeio = getIO(node)
-
-#     for subtask in nodeio.sub_tasks
-#         Base.throwto(subtask, InterruptException())
-#         wait(subtask)
-#     end
-
-#     return nothing
-# end
-
-# function check_subscribers_open(node::Node)
-#     nodeio = getIO(node)
-
-#     for submsg in nodeio.subs
-#         push!(nodeio.sub_tasks, Threads.@spawn subscribe(submsg))
-#     end
-# end
