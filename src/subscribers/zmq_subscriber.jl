@@ -105,9 +105,20 @@ function Base.close(sub::ZmqSubscriber)
     end
 end
 
+function decode!(buf::ProtoBuf.ProtoType, bin_data)
+    io = seek(convert(IOSTream, bin_data), 0)
+    ProtoBuf.readproto(io, buf)
+end
+
+function decode!(buf::AbstractVector{UInt8}, bin_data)
+    for i = 1:min(length(buf), length(bin_data)) 
+        buf[i] = bin_data[i];
+    end
+end
+
 function receive(
     sub::ZmqSubscriber,
-    proto_msg::ProtoBuf.ProtoType,
+    buf,
     write_lock::ReentrantLock,
 )
     if isopen(sub)
@@ -124,23 +135,24 @@ function receive(
         sub.flags.isreceiving = false
 
         # Why not just call IOBuffer(bin_data)?
-        io = seek(convert(IOStream, bin_data), 0)
+        # io = seek(convert(IOStream, bin_data), 0)
         lock(write_lock) do
-            ProtoBuf.readproto(io, proto_msg)
+            decode!(buf, bin_data)
+            # ProtoBuf.readproto(io, proto_msg)
         end
     end
 end
 
 function subscribe(
     sub::ZmqSubscriber,
-    proto_msg::ProtoBuf.ProtoType,
+    buf, 
     write_lock::ReentrantLock,
 )
-    @info "$(sub.name): Listening for message type: $(typeof(proto_msg)), on: $(tcpstring(sub))"
+    @info "$(sub.name): Listening for message type: $(typeof(msg)), on: $(tcpstring(sub))"
 
     try
         while isopen(sub)
-            receive(sub, proto_msg, write_lock)
+            receive(sub, buf, write_lock)
             GC.gc(false)
             yield()
         end
