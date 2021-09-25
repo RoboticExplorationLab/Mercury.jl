@@ -64,15 +64,7 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        new(
-            socket,
-            port,
-            ipaddr,
-            IOBuffer(),
-            name,
-            ReentrantLock(),
-            SubscriberFlags(),
-        )
+        new(socket, port, ipaddr, IOBuffer(), name, ReentrantLock(), SubscriberFlags())
     end
 end
 
@@ -105,37 +97,30 @@ function Base.close(sub::ZmqSubscriber)
     end
 end
 
-function decode!(buf::ProtoBuf.ProtoType, bin_data)
-    io = seek(convert(IOSTream, bin_data), 0)
-    ProtoBuf.readproto(io, buf)
+function forceclose(sub::ZmqSubscriber)
+    @warn "Force closing ZmqSubscriber: $(getname(sub))"
+    close(sub.socket)
 end
 
-function decode!(buf::AbstractVector{UInt8}, bin_data)
-    for i = 1:min(length(buf), length(bin_data)) 
-        buf[i] = bin_data[i];
-    end
-end
-
-function receive(
-    sub::ZmqSubscriber,
-    buf,
-    write_lock::ReentrantLock,
-)
-    if isopen(sub)
-        sub.flags.isreceiving = true
-
-        local bin_data
-        lock(sub.socket_lock) do
+function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantLock())
+    did_receive = false
+    sub.flags.isreceiving = true
+    local bin_data
+    lock(sub.socket_lock) do
+        if isopen(sub)  # must take lock before checking if the socket is open
             bin_data = ZMQ.recv(sub.socket)
             # Once blocking is finished we know we've recieved a new message
             sub.flags.hasreceived = true
             # Forces subscriber to conflate messages
             ZMQ.getproperty(sub.socket, :events)
+            did_receive = true
         end
-        sub.flags.isreceiving = false
+    end
+    sub.flags.isreceiving = false
 
-        # Why not just call IOBuffer(bin_data)?
-        # io = seek(convert(IOStream, bin_data), 0)
+    # Why not just call IOBuffer(bin_data)?
+    # io = seek(convert(IOStream, bin_data), 0)
+    if did_receive
         lock(write_lock) do
             decode!(buf, bin_data)
             # ProtoBuf.readproto(io, proto_msg)
@@ -143,12 +128,8 @@ function receive(
     end
 end
 
-function subscribe(
-    sub::ZmqSubscriber,
-    buf, 
-    write_lock::ReentrantLock,
-)
-    @info "$(sub.name): Listening for message type: $(typeof(msg)), on: $(tcpstring(sub))"
+function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
+    @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(tcpstring(sub))"
 
     try
         while isopen(sub)
@@ -161,7 +142,9 @@ function subscribe(
         sub.flags.diderror = true
         close(sub)
         @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
-        @error err exception=(err, catch_backtrace())
+        if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
+            @error err exception = (err, catch_backtrace())
+        end
     end
 
     return nothing
@@ -169,30 +152,30 @@ end
 
 tcpstring(sub::ZmqSubscriber) = tcpstring(sub.ipaddr, sub.port)
 
-# """
-#     publish_until_receive(pub, sub, msg_out; [timeout])
+"""
+    publish_until_receive(pub, sub, msg_out; [timeout])
 
-# Publish a message via the publisher `pub` until it's received by the subscriber `sub`.
-# Both `pub` and `sub` should have the same port and IP address.
+Publish a message via the publisher `pub` until it's received by the subscriber `sub`.
+Both `pub` and `sub` should have the same port and IP address.
 
-# The function returns `true` if a message was received before `timeout` seconds have passed,
-#     and `false` otherwise.
-# """
-# function publish_until_receive(
-#     pub::ZmqPublisher,
-#     sub::ZmqSubscriber,
-#     msg_out::ProtoBuf.ProtoType,
-#     timeout = 1.0,  # seconds
-# )
-#     @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"
-#     t_start = time()
-#     sub.flags.hasreceived = false
-#     while (time() - t_start < timeout)
-#         publish(pub, msg_out)
-#         sleep(0.001)
-#         if sub.flags.hasreceived
-#             return true
-#         end
-#     end
-#     return false
-# end
+The function returns `true` if a message was received before `timeout` seconds have passed,
+    and `false` otherwise.
+"""
+function publish_until_receive(
+    pub::ZmqPublisher,
+    sub::ZmqSubscriber,
+    msg_out::ProtoBuf.ProtoType,
+    timeout = 1.0,  # seconds
+)
+    @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"
+    t_start = time()
+    sub.flags.hasreceived = false
+    while (time() - t_start < timeout)
+        publish(pub, msg_out)
+        sleep(0.001)
+        if sub.flags.hasreceived
+            return true
+        end
+    end
+    return false
+end

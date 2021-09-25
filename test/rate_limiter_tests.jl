@@ -83,6 +83,7 @@ function mykernel()
 end
 1 / @elapsed mykernel()
 
+@testset "Rate limiter tests" begin
 rate = 1000
 test_time = 0.1 # sec
 lrl = LoopRateLimiter(rate)
@@ -114,4 +115,5 @@ error = (rate - runrate_macro3(mykernel, Val(rate), test_time)) / rate * 100
 error = (rate - runrate_macro4(mykernel, rate, test_time)) / rate * 100
 @test error < 5  # less than 5% error
 
-# end
+end
+
