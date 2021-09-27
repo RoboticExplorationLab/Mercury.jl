@@ -46,9 +46,6 @@ end
     end
 
     @testset "Simple Pub/Sub" begin
-        # Hg.reset_sub_count()
-        # Hg.reset_pub_count()
-
         # Test simple pub/sub
         sub = Hg.ZmqSubscriber(ctx, addr, port)
         @test isopen(sub)
@@ -104,9 +101,10 @@ end
         sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
         schedule(sub_task)
         cnt = 0
-        Hg.publish_until_receive(pub, sub, msg_out)
+        timeout = 5.0 # seconds
+        @test Hg.publish_until_receive(pub, sub, msg_out, timeout)
         @test !istaskdone(sub_task)
-        sleep(0.5)
+        # sleep(1.0)
         @show sub.flags.hasreceived
         @test msg.x == msg_out.x
         close_task = @async close(sub)
@@ -184,3 +182,77 @@ end
         close(sub)
     end
 end
+
+
+# # %%
+# import Mercury as Hg
+# using ZMQ
+# using Sockets
+# using Test
+
+# include(joinpath(@__DIR__, "jlout","test_msg_pb.jl"))
+
+# Hg.reset_sub_count()
+# ctx = ZMQ.Context()
+# addr = ip"127.0.0.1"
+# port = 5555
+
+# @testset begin
+# # Test receive performance
+# function pub_message(pub)
+#     msg_out = TestMsg(x = 1, y = 2, z = 3)
+#     global do_publish
+#     i = 0
+#     while (do_publish)
+#         msg_out.x = i
+#         Hg.publish(pub, msg_out)
+#         i += 1
+#         sleep(0.001)
+#     end
+# end
+# sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
+# pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
+# msg = TestMsg(x = 10, y = 11, z = 12)
+# msg_out = TestMsg(x = 1, y = 2, z = 3)
+
+# # Close the task by waiting for a receive
+# sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
+# schedule(sub_task)
+# cnt = 0
+# Hg.publish_until_receive(pub, sub, msg_out)
+# @test !istaskdone(sub_task)
+# sleep(0.5)
+# @test msg.x == msg_out.x
+# close_task = @async close(sub)
+# @test !istaskdone(close_task)  # waiting for receive to finish
+# @test isopen(sub)
+# @test isopen(pub)
+# @test sub.flags.isreceiving
+# @test islocked(sub.socket_lock)
+
+# sub.flags.hasreceived = false
+# Hg.publish_until_receive(pub, sub, msg_out)
+# @test sub.flags.hasreceived
+# sleep(0.1)
+# @test istaskdone(close_task)  # should be closed now that the receive finished
+# @test !isopen(sub)
+# sleep(0.1)  # sleep to wait for socket to close and the subscribe loop to exit
+# @test istaskdone(sub_task)  # the subscriber task should finish after the socket is closed
+# @test !istaskfailed(sub_task)  # The task shouldn't end with an error
+# close(pub)
+
+# sub = Hg.ZmqSubscriber(ctx, addr, port)
+# pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
+# sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
+# schedule(sub_task)
+# Hg.publish_until_receive(pub, sub, msg_out)
+# !istaskdone(sub_task)
+# Hg.forceclose(sub)
+# sleep(0.1)  # wait for the task to finish
+# @test istaskdone(sub_task)  # the subscriber task should finish after the socket is closed
+# @test !istaskfailed(sub_task) # the EOFError should be caught
+# @test !isopen(sub)
+# @test isopen(pub)
+# close(pub)
+# @test !isopen(pub)
+# end
