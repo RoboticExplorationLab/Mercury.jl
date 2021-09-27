@@ -1,7 +1,4 @@
-empty_message_str = "Empty message passed to encode!"
-big_message_str = "Can only safely encode 254 bytes at a time"
-
-msg_block_size = 256
+const MSG_BLOCK_SIZE = 256
 
 """
 """
@@ -11,19 +8,19 @@ mutable struct SerialPublisher <: Publisher
     name::String
 
     # Buffer for encoded messages
-    msg_out_buffer::StaticArrays.MVector{msg_block_size, UInt8}
+    msg_out_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE, UInt8}
     msg_out_length::Int64
 
     function SerialPublisher(serial_port::LibSerialPort.SerialPort;
                              name = genpublishername(),
                              )
         @catchserial(LibSerialPort.open(serial_port),
-                        "Failed to open serial port: `$serial_port`"
-                        )
-        close(serial_port)
+                     "Failed to open serial port: `$serial_port`"
+                     )
+        LibSerialPort.close(serial_port)
 
         # Vector written to when encoding Protobuf using COBS protocol
-        msg_out_buffer = StaticArrays.@MVector zeros(UInt8, msg_block_size)
+        msg_out_buffer = StaticArrays.@MVector zeros(UInt8, MSG_BLOCK_SIZE)
         msg_out_length = 0
 
         @info "Publishing $name on serial port"
@@ -32,10 +29,13 @@ mutable struct SerialPublisher <: Publisher
 end
 
 function SerialPublisher(port_name::String,
-                   baudrate::Int64;
-                   name = genpublishername(),
-                   )
-    sp = LibSerialPort.open(port_name, baudrate)
+                         baudrate::Int64;
+                         name = genpublishername(),
+                         )
+    local sp
+    @catchserial(sp = LibSerialPort.open(port_name, baudrate),
+                "Failed to open serial port: `$port_name`"
+                )
     LibSerialPort.close(sp)
 
     return SerialPublisher(sp; name = name)
@@ -58,8 +58,8 @@ end
 Zero Allocation COBS encoding of a message block
 """
 function encode(pub::SerialPublisher, payload::AbstractVector{UInt8})
-    length(payload) == 0 && error("empty_message_str")
-    length(payload) > 254 && error("big_message_str")
+    length(payload) == 0 && error("Empty message passed to encode!")
+    length(payload) > 254 && error("Can only safely encode 254 bytes at a time")
 
     n = length(payload)
     pub.msg_out_length = n + 2

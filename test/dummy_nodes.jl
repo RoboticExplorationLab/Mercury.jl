@@ -6,7 +6,7 @@ module DummyNodes
     using StaticArrays
     using TOML
 
-    include("$(@__DIR__)/jlout/test_msg_pb.jl")
+    joinpath(@__DIR__, "jlout", "test_msg_pb.jl")
 
     mutable struct PubNode <: Hg.Node
         # Required by Abstract Node type

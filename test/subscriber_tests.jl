@@ -46,8 +46,8 @@ end
     end
 
     @testset "Simple Pub/Sub" begin
-        Hg.reset_sub_count()
-        Hg.reset_pub_count()
+        # Hg.reset_sub_count()
+        # Hg.reset_pub_count()
 
         # Test simple pub/sub
         sub = Hg.ZmqSubscriber(ctx, addr, port)
@@ -72,7 +72,7 @@ end
                 break
             end
         end
-        # @test sub.flags.hasreceived
+        @test sub.flags.hasreceived
         @test istaskdone(rtask)
         @test msg.x == cnt   # The first many are "lost." It accepts the first one to be received.
         @test msg.y == 2
@@ -99,8 +99,8 @@ end
         pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
         msg = TestMsg(x = 10, y = 11, z = 12)
         msg_out = TestMsg(x = 1, y = 2, z = 3)
-        sub = Hg.Subscriber(ctx, addr, port)
-        pub = Hg.Publisher(ctx, addr, port, name = "TestPub")
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
+        pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
 
         # Close the task by waiting for a receive
         sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
@@ -123,8 +123,8 @@ end
         @test !istaskfailed(sub_task)  # The task shouldn't end with an error
         close(pub)
 
-        sub = Hg.Subscriber(ctx, addr, port)
-        pub = Hg.Publisher(ctx, addr, port, name = "TestPub")
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
+        pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
         sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
         schedule(sub_task)
         Hg.publish_until_receive(pub, sub, msg_out)
@@ -136,7 +136,7 @@ end
         close(pub)
     end
 
-        @testset "Testing Subscriber Conflate" begin
+    @testset "Testing Subscriber Conflate" begin
         ## Test receive performance
         function pub_message(pub)
             rate = 100  # Publishing at 100 Hz
@@ -153,8 +153,8 @@ end
             end lrl
         end
 
-        sub = Hg.Subscriber(ctx, addr, port, name = "TestSub")
-        pub = Hg.Publisher(ctx, addr, port, name = "TestPub")
+        sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
+        pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
         msg = TestMsg(x = 10, y = 11, z = 12)
 
         # Publish message in a separate task (really fast)
@@ -177,3 +177,43 @@ end
         close(sub)
     end
 end
+
+# %%
+Hg.reset_sub_count()
+ctx = ZMQ.Context()
+addr = ip"127.0.0.1"
+port = 5555
+
+Hg.reset_sub_count()
+Hg.reset_pub_count()
+
+# Test simple pub/sub
+sub = Hg.ZmqSubscriber(ctx, addr, port)
+@test isopen(sub)
+msg = TestMsg(x = 10, y = 11, z = 12)
+rtask = @task Hg.receive(sub, msg)
+schedule(rtask)
+istaskdone(rtask)
+
+pub = Hg.ZmqPublisher(ctx, addr, port)
+msg_out = TestMsg(x = 1, y = 2, z = 3)
+@test msg.x == 10
+@test msg.y == 11
+@test msg.z == 12
+cnt = 0
+for i = 1:1000
+    msg_out.x = i
+    Hg.publish(pub, msg_out)
+    sleep(0.001)
+    if istaskdone(rtask)
+        cnt = i
+        break
+    end
+end
+@test sub.flags.hasreceived
+@test istaskdone(rtask)
+@test msg.x == cnt   # The first many are "lost." It accepts the first one to be received.
+@test msg.y == 2
+@test msg.z == 3
+close(pub)
+close(sub)

@@ -1,14 +1,14 @@
-msg_block_size = 256
-serial_port_buffer_size = 1024
+const MSG_BLOCK_SIZE = 256
+const SERIAL_PORT_BUFFER_SIZE = 1024
 
 mutable struct SerialSubscriber <: Subscriber
     serial_port::LibSerialPort.SerialPort
 
     name::String
 
-    read_buffer::StaticArrays.MVector{serial_port_buffer_size, UInt8}
+    read_buffer::StaticArrays.MVector{SERIAL_PORT_BUFFER_SIZE, UInt8}
 
-    msg_in_buffer::StaticArrays.MVector{msg_block_size, UInt8}
+    msg_in_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE, UInt8}
     msg_in_length::Int64
 
     flags::SubscriberFlags
@@ -19,13 +19,13 @@ mutable struct SerialSubscriber <: Subscriber
         @catchserial(LibSerialPort.open(serial_port),
                     "Failed to connect to serial port: `$serial_port`"
                     )
-        # close(serial_port)
+        LibSerialPort.close(serial_port)
 
         # Buffer for dumping read bytes into
-        read_buffer = StaticArrays.@MVector zeros(UInt8, serial_port_buffer_size)
+        read_buffer = StaticArrays.@MVector zeros(UInt8, SERIAL_PORT_BUFFER_SIZE)
 
         # Vector written to when encoding Protobuf using COBS protocol
-        msg_in_buffer = StaticArrays.@MVector zeros(UInt8, msg_block_size)
+        msg_in_buffer = StaticArrays.@MVector zeros(UInt8, MSG_BLOCK_SIZE)
         msg_in_length = 0
 
         @info "Subscribing $name on serial port"
@@ -74,12 +74,12 @@ function Base.readuntil(sub::SerialSubscriber, delim::UInt8)
             # local buffer one byte at a time until delim byte encoutered then return
             sub.read_buffer[i] = read(sub.serial_port, UInt8)
             if sub.read_buffer[i] == delim #0x00
-                return @view sub.read_buffer[max(1,i+1-msg_block_size):i]
+                return @view sub.read_buffer[max(1,i+1-MSG_BLOCK_SIZE):i]
             end
         end
     end
     # If serial port isn't open or flag byte isn't encountered in buffer return nothing
-    return nothing
+    return @view UInt8[][:]
 end
 
 """
@@ -90,7 +90,7 @@ to decode message block.
 function decode(sub::SerialSubscriber, msg::AbstractVector{UInt8})
     incoming_msg_size = length(msg)
     incoming_msg_size == 0 && error("Empty message passed to encode!")
-    incoming_msg_size > msg_block_size && error("Can only safely encode 256 bytes at a time")
+    incoming_msg_size > MSG_BLOCK_SIZE && error("Can only safely encode 256 bytes at a time")
 
     if !any(msg .== 0x00)
         return nothing
@@ -106,7 +106,7 @@ function decode(sub::SerialSubscriber, msg::AbstractVector{UInt8})
 
     # While we haven't encountered flag byte and haven't read more than the
     # maximum message size
-    while b ≠ 0x00 && push_ind <= msg_block_size && pop_ind <= incoming_msg_size
+    while b ≠ 0x00 && push_ind <= MSG_BLOCK_SIZE && pop_ind <= incoming_msg_size
         c += 1
         if c < n
             sub.msg_in_buffer[push_ind] = b
@@ -139,12 +139,11 @@ function receive(sub::SerialSubscriber,
         encoded_msg = readuntil(sub, 0x00)
         sub.flags.isreceiving = false
 
-        if encoded_msg !== nothing
+        if !isempty(encoded_msg)
             decoded_msg = decode(sub, encoded_msg)
             lock(write_lock) do
                 ProtoBuf.readproto(IOBuffer(decoded_msg), proto_msg)
             end
-            # @info "Recieved message"
 
             sub.flags.hasreceived = true
             return true
@@ -170,7 +169,7 @@ function subscribe(sub::SerialSubscriber,
             GC.gc(false)
             yield()
         end
-        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
+        @info "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
     catch err
         sub.flags.diderror = true
         close(sub)
@@ -180,3 +179,4 @@ function subscribe(sub::SerialSubscriber,
 
     return nothing
 end
+

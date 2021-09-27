@@ -32,6 +32,7 @@ function get_conflate(socket::ZMQ.Socket, option_val::Integer)
 end
 
 NUM_PUBS = 1;
+reset_pub_count() = global NUM_PUBS = 1
 function genpublishername()
     global NUM_PUBS
     name = "publisher_$NUM_PUBS"
@@ -40,6 +41,7 @@ function genpublishername()
 end
 
 NUM_SUBS = 1;
+reset_sub_count() = global NUM_SUBS = 1
 function gensubscribername()
     global NUM_SUBS
     name = "subscriber_$NUM_SUBS"
@@ -47,8 +49,6 @@ function gensubscribername()
     return name
 end
 
-reset_sub_count() = global NUM_SUBS = 1
-reset_pub_count() = global NUM_PUBS = 1
 
 
 macro catchzmq(expr, errmsg)
@@ -71,7 +71,9 @@ macro catchserial(expr, errmsg)
         try
             $expr
         catch e
-            if e isa ErrorException
+            if e isa LibSerialPort.Timeout
+                @error "LibSerialPort Timeout error thrown. Is a device connected to the serial port?\n"
+            elseif e isa ErrorException
                 @error $errmsg * "\n"
             end
             rethrow(e)
