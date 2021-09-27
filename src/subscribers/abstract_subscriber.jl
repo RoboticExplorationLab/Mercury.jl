@@ -54,7 +54,6 @@ struct SubscribedMessage
     name::String
 
     function SubscribedMessage(msg::ProtoBuf.ProtoType, sub::Subscriber; name=getname(sub))
-        has_new = false
         new(msg, sub, ReentrantLock(), name)
     end
 end

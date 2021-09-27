@@ -156,31 +156,3 @@ function subscribe(
 end
 
 tcpstring(sub::ZmqSubscriber) = tcpstring(sub.ipaddr, sub.port)
-
-# """
-#     publish_until_receive(pub, sub, msg_out; [timeout])
-
-# Publish a message via the publisher `pub` until it's received by the subscriber `sub`.
-# Both `pub` and `sub` should have the same port and IP address.
-
-# The function returns `true` if a message was received before `timeout` seconds have passed,
-#     and `false` otherwise.
-# """
-# function publish_until_receive(
-#     pub::ZmqPublisher,
-#     sub::ZmqSubscriber,
-#     msg_out::ProtoBuf.ProtoType,
-#     timeout = 1.0,  # seconds
-# )
-#     @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"
-#     t_start = time()
-#     sub.flags.hasreceived = false
-#     while (time() - t_start < timeout)
-#         publish(pub, msg_out)
-#         sleep(0.001)
-#         if sub.flags.hasreceived
-#             return true
-#         end
-#     end
-#     return false
-# end
