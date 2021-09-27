@@ -53,9 +53,10 @@ end
         sub = Hg.ZmqSubscriber(ctx, addr, port)
         @test isopen(sub)
         msg = TestMsg(x = 10, y = 11, z = 12)
-        rtask = @task Hg.receive(sub, msg)
+        rtask = @task Hg.receive(sub, msg, ReentrantLock())
         schedule(rtask)
-        istaskdone(rtask)
+        @test !istaskdone(rtask)
+        @test !istaskfailed(rtask)
 
         pub = Hg.ZmqPublisher(ctx, addr, port)
         msg_out = TestMsg(x = 1, y = 2, z = 3)
@@ -81,7 +82,6 @@ end
         close(sub)
     end
 
-
     @testset "Receive performance" begin
         ## Test receive performance
         function pub_message(pub)
@@ -99,8 +99,6 @@ end
         pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
         msg = TestMsg(x = 10, y = 11, z = 12)
         msg_out = TestMsg(x = 1, y = 2, z = 3)
-        sub = Hg.ZmqSubscriber(ctx, addr, port)
-        pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
 
         # Close the task by waiting for a receive
         sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
@@ -113,9 +111,15 @@ end
         @test msg.x == msg_out.x
         close_task = @async close(sub)
         @test !istaskdone(close_task)  # waiting for receive to finish
+        @test isopen(sub)
+        @test isopen(pub)
+        @test sub.flags.isreceiving
+        @test islocked(sub.socket_lock)
 
         sub.flags.hasreceived = false
         Hg.publish_until_receive(pub, sub, msg_out)
+        @test sub.flags.hasreceived
+        sleep(0.1)
         @test istaskdone(close_task)  # should be closed now that the receive finished
         @test !isopen(sub)
         sleep(0.1)  # sleep to wait for socket to close and the subscribe loop to exit
@@ -132,8 +136,11 @@ end
         Hg.forceclose(sub)
         sleep(0.1)  # wait for the task to finish
         @test istaskdone(sub_task)  # the subscriber task should finish after the socket is closed
-        @test istaskfailed(sub_task) # the task will exit with an error since
+        @test !istaskfailed(sub_task) # the EOFError should be caught
+        @test !isopen(sub)
+        @test isopen(pub)
         close(pub)
+        @test !isopen(pub)
     end
 
     @testset "Testing Subscriber Conflate" begin

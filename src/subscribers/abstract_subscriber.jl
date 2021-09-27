@@ -31,15 +31,26 @@ function got_new!(sub::Subscriber)
     return flags.hasreceived
 end
 
+function decode!(buf::ProtoBuf.ProtoType, bin_data)
+    io = seek(convert(IOStream, bin_data), 0)
+    ProtoBuf.readproto(io, buf)
+end
+
+function decode!(buf::AbstractVector{UInt8}, bin_data)
+    for i = 1:min(length(buf), length(bin_data)) 
+        buf[i] = bin_data[i];
+    end
+end
+
 function receive(sub::Subscriber,
-                 proto_msg::ProtoBuf.ProtoType,
-                 write_lock::ReentrantLock)::Nothing
+                 buf, 
+                 write_lock::ReentrantLock = ReentrantLock())::Nothing
     error("The `receive` method hasn't been implemented for your Subscriber yet!")
 end
 
 function subscribe(sub::Subscriber,
-                   proto_msg::ProtoBuf.ProtoType,
-                   write_lock::ReentrantLock)::Nothing
+                   buf, 
+                   write_lock::ReentrantLock = ReentrantLock())::Nothing
     error("The `subscribe` method hasn't been implemented for your Subscriber yet!")
 end
 
