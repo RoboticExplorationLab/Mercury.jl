@@ -14,16 +14,16 @@ mutable struct SerialPublisher <: Publisher
     function SerialPublisher(serial_port::LibSerialPort.SerialPort;
                              name = genpublishername(),
                              )
+        sp_name = "Serial Port-$(LibSerialPort.Lib.sp_get_port_name(serial_port.ref))"
         @catchserial(LibSerialPort.open(serial_port),
-                     "Failed to open serial port: `$serial_port`"
+                     "Failed to open: $sp_name"
                      )
-        LibSerialPort.close(serial_port)
 
         # Vector written to when encoding Protobuf using COBS protocol
         msg_out_buffer = StaticArrays.@MVector zeros(UInt8, MSG_BLOCK_SIZE)
         msg_out_length = 0
 
-        @info "Publishing $name on serial port"
+        @info "Publishing $name on: $sp_name"
         new(serial_port, name, msg_out_buffer, msg_out_length)
     end
 end
@@ -33,17 +33,24 @@ function SerialPublisher(port_name::String,
                          name = genpublishername(),
                          )
     local sp
-    @catchserial(sp = LibSerialPort.open(port_name, baudrate),
-                "Failed to open serial port: `$port_name`"
-                )
-    LibSerialPort.close(sp)
+    @catchserial(
+        begin
+            sp = LibSerialPort.open(port_name, baudrate)
+            LibSerialPort.close(sp)
+        end,
+        "Failed to open: Serial Port-$port_name"
+        )
 
     return SerialPublisher(sp; name = name)
 end
 
 
 Base.isopen(pub::SerialPublisher) = LibSerialPort.isopen(pub.serial_port)
-Base.close(pub::SerialPublisher) = LibSerialPort.close(pub.serial_port)
+function Base.close(pub::SerialPublisher)
+    @info "Closing SerialPublisher: $(getname(pub)) on: $(portstring(sub))"
+    LibSerialPort.close(pub.serial_port)
+end
+
 
 function Base.open(pub::SerialPublisher)
     if !isopen(pub)
@@ -98,3 +105,5 @@ function publish(pub::SerialPublisher, proto_msg::ProtoBuf.ProtoType)
         write(pub.serial_port, encoded_msg)
     end
 end
+
+portstring(sub::SerialPublisher) = "Serial Port-" * LibSerialPort.Lib.sp_get_port_name(sub.serial_port.ref)

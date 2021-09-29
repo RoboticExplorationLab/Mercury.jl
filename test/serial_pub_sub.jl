@@ -1,149 +1,207 @@
 import Mercury as Hg
-using LibSerialPort
 using Test
 using BenchmarkTools
 
 
 @testset "Serial Pub/Sub Tests" begin
     include("jlout/test_msg_pb.jl")
-    port_name = "/dev/tty.usbmodem92222901"
+    out_port_name = "/dev/tty.usbserial-D309D5SC"
+    in_port_name = "/dev/tty.usbserial-D309DNQ0"
     baudrate = 57600
 
-    @testset "SerialSubscriber Construction" begin
-        Hg.reset_sub_count()
-        sub = Hg.SerialSubscriber(port_name, baudrate);
+    # @testset "SerialSubscriber Construction" begin
+    #     Hg.reset_sub_count()
+    #     sub = Hg.SerialSubscriber(in_port_name, baudrate);
 
-        @test open(sub)
-        @test isopen(sub)
-        @test sub.name == "subscriber_1"
-        close(sub)
-        @test !isopen(sub.serial_port)
+    #     @test isopen(sub)
+    #     @test sub.name == "subscriber_1"
+    #     close(sub)
+    #     @test !isopen(sub.serial_port)
 
-        sp = LibSerialPort.open(port_name, baudrate)
-        close(sp)
-        sub = Hg.SerialSubscriber(sp);
+    #     sp = LibSerialPort.open(in_port_name, baudrate)
+    #     close(sp)
+    #     sub = Hg.SerialSubscriber(sp);
 
-        @test open(sub)
-        @test isopen(sub)
-        @test sub.serial_port == sp
-        @test sub.name == "subscriber_2"
-        close(sub)
-        @test !isopen(sub.serial_port)
-    end
+    #     @test isopen(sub)
+    #     @test sub.serial_port == sp
+    #     @test sub.name == "subscriber_2"
+    #     close(sub)
+    #     @test !isopen(sub.serial_port)
+    # end
 
-    @testset "SerialPublisher Construction" begin
-        Hg.reset_pub_count()
-        pub = Hg.SerialPublisher(port_name, baudrate);
+    # @testset "SerialPublisher Construction" begin
+    #     Hg.reset_pub_count()
+    #     pub = Hg.SerialPublisher(out_port_name, baudrate);
 
-        @test open(pub)
-        @test isopen(pub)
-        @test pub.name == "publisher_1"
-        close(pub)
-        @test !isopen(pub)
-        @test !isopen(pub.serial_port)
+    #     @test isopen(pub)
+    #     @test pub.name == "publisher_1"
+    #     close(pub)
+    #     @test !isopen(pub)
+    #     @test !isopen(pub.serial_port)
 
-        sp = LibSerialPort.open(port_name, baudrate)
-        close(sp)
-        pub = Hg.SerialPublisher(sp);
+    #     sp = LibSerialPort.open(out_port_name, baudrate)
+    #     close(sp)
+    #     pub = Hg.SerialPublisher(sp);
 
-        @test open(pub)
-        @test isopen(pub)
-        @test pub.serial_port == sp
-        @test pub.name == "publisher_2"
-        close(pub)
-        @test !isopen(pub)
-        @test !isopen(pub.serial_port)
-    end
+    #     @test isopen(pub)
+    #     @test pub.serial_port == sp
+    #     @test pub.name == "publisher_2"
+    #     close(pub)
+    #     @test !isopen(pub)
+    #     @test !isopen(pub.serial_port)
+    # end
 
-    @testset "COBS encode/decode" begin
-        Hg.reset_sub_count()
-        Hg.reset_pub_count()
-        sp = LibSerialPort.open(port_name, baudrate)
-        close(sp)
+    # @testset "COBS encode/decode" begin
+    #     sub = Hg.SerialSubscriber(in_port_name, baudrate);
+    #     pub = Hg.SerialPublisher(out_port_name, baudrate);
 
-        sub = Hg.SerialSubscriber(sp);
-        pub = Hg.SerialPublisher(sp);
+    #     test_msg = TestMsg(x=1, y=2, z=3)
 
-        test_msg = TestMsg(x=1, y=2, z=3)
+    #     test_data = rand(UInt8, 150);
+    #     test_data[test_data .== 0x00] .= 0x01
+    #     too_big_test_data = rand(UInt8, 600)
 
-        test_data = rand(UInt8, 150);
-        test_data[test_data .== 0x00] .= 0x01
-        too_big_test_data = rand(UInt8, 600)
+    #     # Check encode and decode are inverses of one another
+    #     code_decode_results = Hg.decode(sub, Hg.encode(pub, test_data))
+    #     @test code_decode_results == test_data
+    #     # Check that decoding a vector without any 0x00 byte fails
+    #     @test Hg.decode(sub, test_data) === nothing
+    #     # Check that the encode fails if messages are too big
+    #     @test begin
+    #         try
+    #             Hg.encode(pub, too_big_test_data)
+    #         catch e
+    #             e isa ErrorException ? true : false
+    #         end
+    #     end
+    #     too_big_test_data[too_big_test_data .== 0x00] .= 0x01
+    #     # Check that the decode fails if messages are too big
+    #     @test begin
+    #         try
+    #             Hg.decode(sub, too_big_test_data)
+    #         catch e
+    #             e isa ErrorException ? true : false
+    #         end
+    #     end
 
-        # Check encode and decode are inverses of one another
-        code_decode_results = Hg.Subscribers.decode(sub, Hg.Publishers.encode(pub, test_data))
-        @test code_decode_results == test_data
-        # Check that decoding a vector without any 0x00 byte fails
-        @test Hg.Subscribers.decode(sub, test_data) === nothing
-        # Check that the encode fails if messages are too big
-        @test begin
-            try
-                Hg.Publishers.encode(pub, too_big_test_data)
-            catch e
-                e isa ErrorException ? true : false
-            end
-        end
-        too_big_test_data[too_big_test_data .== 0x00] .= 0x01
-        # Check that the decode fails if messages are too big
-        @test begin
-            try
-                Hg.Subscribers.decode(sub, too_big_test_data)
-            catch e
-                e isa ErrorException ? true : false
-            end
-        end
-    end
+    #     close(sub)
+    #     close(pub)
+    # end
 
     @testset "Simple Serial Pub/Sub" begin
-        # Test simple pub/sub on same port
-        sp = LibSerialPort.open(port_name, baudrate)
-        close(sp)
+        ## Test receive performance
+        function pub_message(pub)
+            rate = 100  # Publishing at 100 Hz
+            lrl = Hg.LoopRateLimiter(rate)
 
-        sub = Hg.SerialSubscriber(sp);
-        pub = Hg.SerialPublisher(sp);
+            msg_out = TestMsg(x = 1, y = 2, z = 3)
+            global do_publish
+            Hg.@rate while (do_publish)
+                Hg.publish(pub, msg_out)
+            end lrl
+        end
+
+        # Test simple pub/sub on same port
+        pub = Hg.SerialPublisher(out_port_name, baudrate);
+        sub = Hg.SerialSubscriber(in_port_name, baudrate);
         msg = TestMsg(x = 10, y = 11, z = 12)
-        msg_out = TestMsg(x = 1, y = 2, z = 3)
 
         @test msg.x == 10
         @test msg.y == 11
         @test msg.z == 12
 
-        open(sp)
-        try
-            Hg.publish(pub, msg_out)
-            sleep(0.01)
-            Hg.receive(sub, msg)
-        finally
-            close(sp)
-        end
+        sub_task = @async Hg.subscribe(sub, msg, ReentrantLock())
+
+        # Publish message in a separate task (really fast)
+        global do_publish = true
+        pub_task = @async pub_message(pub)
+        @test !istaskdone(pub_task)
+
+        sleep(10)
+
+        # Close the sub and pub threads
+        close_sub_task = @async close(sub)
+        # close_pub_task = @async close(pub)
+        wait(close_sub_task)
+        # wait(close_pub_task)
+        global do_publish = false
+        wait(pub_task)
 
         @test msg.x == 1
         @test msg.y == 2
         @test msg.z == 3
     end
+    # @testset "Publish/Receive Performance" begin
+    #     sub = Hg.SerialSubscriber(in_port_name, baudrate, name = "TestSub")
+    #     pub = Hg.SerialPublisher(out_port_name, baudrate, name = "TestPub")
 
-    @testset "Publish/Receive Performance" begin
-        sp = LibSerialPort.open(port_name, baudrate)
-        close(sp)
+    #     function pub_sub_circle()
+    #         msg_out = TestMsg(x = 1, y = 2, z = 3)
+    #         msg_in = TestMsg(x = 10, y = 11, z = 12)
 
-        sub = Hg.SerialSubscriber(sp, name = "TestSub")
-        pub = Hg.SerialPublisher(sp, name = "TestPub")
+    #         Hg.publish(pub, msg_out)
+    #         sleep(0.01)
+    #         Hg.receive(sub, msg_in)
+    #     end
 
-        function pub_sub_circle()
-            msg_out = TestMsg(x = 1, y = 2, z = 3)
-            msg_in = TestMsg(x = 10, y = 11, z = 12)
+    #     b = @benchmark $pub_sub_circle()
+    #     @test maximum(b.gctimes) == 0
 
-            Hg.publish(pub, msg_out)
-            sleep(0.05)
-            Hg.receive(sub, msg_in)
-        end
-
-        open(sp)
-        try
-            b = @benchmark $pub_sub_circle()
-            @test maximum(b.gctimes) == 0
-        finally
-            close(sp)
-        end
-    end
+    #     close(sub)
+    #     close(pub)
+    # end
 end
+
+# %%
+import Mercury as Hg
+using Test
+using BenchmarkTools
+
+include("jlout/test_msg_pb.jl")
+out_port_name = "/dev/tty.usbserial-D309D5SC"
+in_port_name = "/dev/tty.usbserial-D309DNQ0"
+baudrate = 57600
+
+function pub_message(pub)
+    rate = 10  # Publishing at 100 Hz
+    lrl = Hg.LoopRateLimiter(rate)
+
+    msg_out = TestMsg(x = 1, y = 2, z = 3)
+    global do_publish
+    Hg.@rate while (do_publish)
+        Hg.publish(pub, msg_out)
+        yield()
+    end lrl
+end
+
+# Test simple pub/sub on same port
+pub = Hg.SerialPublisher(out_port_name, baudrate);
+# sub = Hg.SerialSubscriber(in_port_name, baudrate);
+
+# %%
+msg = TestMsg(x = 10, y = 11, z = 12)
+
+@test msg.x == 10
+@test msg.y == 11
+@test msg.z == 12
+
+
+# sub_task = @async Hg.subscribe(sub, msg, ReentrantLock())
+
+# Publish message in a separate task (really fast)
+global do_publish = true
+pub_task = @task pub_message(pub)
+schedule(pub_task)
+@test !istaskdone(pub_task)
+
+sleep(2)
+
+# close(sub)
+# wait(sub_task)
+global do_publish = false
+wait(pub_task)
+
+# %%
+msg = TestMsg(x = 10, y = 11, z = 12)
+
+Hg.publish(pub, msg)
