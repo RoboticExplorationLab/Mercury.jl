@@ -60,7 +60,7 @@ This is useful for tracking multiple messages at once
 """
 struct SubscribedMessage
     msg::ProtoBuf.ProtoType  # Note this is an abstract type
-    sub::Subscriber
+    sub::Subscriber          # Note this is an abstract type
     lock::ReentrantLock
     name::String
 

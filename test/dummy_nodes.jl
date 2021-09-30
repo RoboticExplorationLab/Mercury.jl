@@ -6,7 +6,7 @@ module DummyNodes
     using StaticArrays
     using TOML
 
-    joinpath(@__DIR__, "jlout", "test_msg_pb.jl")
+    include(joinpath(@__DIR__, "jlout", "test_msg_pb.jl"))
 
     mutable struct PubNode <: Hg.Node
         # Required by Abstract Node type
@@ -109,13 +109,15 @@ end
 # %%
 import Mercury as Hg
 
-Hg.Subscribers.reset_sub_count()
-Hg.Publishers.reset_pub_count()
+Hg.reset_sub_count()
+Hg.reset_pub_count()
 pub_node, sub_node = DummyNodes.main();
 
 # %%
 sub_node_task = @task Hg.launch(sub_node)
 schedule(sub_node_task)
+istaskfailed(sub_node_task)
+istaskdone(sub_node_task)
 
 # %%
 pub_node_task = @task Hg.launch(pub_node)

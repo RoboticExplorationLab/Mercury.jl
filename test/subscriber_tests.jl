@@ -7,6 +7,18 @@ if !isdefined(@__MODULE__, :TestMsg)
     include("jlout/test_msg_pb.jl")
 end
 
+# Hg.reset_sub_count()
+# ctx = ZMQ.Context()
+# addr = ip"127.0.0.1"
+# port = 5555
+# sub = Hg.ZmqSubscriber(ctx, addr, port)
+# isopen(sub)
+# msg = TestMsg(x=0,y=0,z=0)
+# subtask = @async Hg.subscribe(sub, msg, ReentrantLock())
+# istaskdone(subtask)
+# istaskfailed(subtask)
+# Hg.forceclose(sub)
+# wait(subtask)
 
 @testset "ZmqSubscriber" begin
     Hg.reset_sub_count()

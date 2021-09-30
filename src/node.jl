@@ -61,9 +61,6 @@ Inside of `compute`:
     ...
 
 """
-# function add_publisher!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, args...)
-#     push!(nodeio.pubs, PublishedMessage(msg, ZmqPublisher(args...)))
-# end
 function add_publisher!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, pub::Publisher)
     push!(nodeio.pubs, PublishedMessage(msg, pub))
 end
@@ -113,9 +110,6 @@ In `compute`:
     # use node.local_test_msg in the rest of the code
     ...
 """
-# function add_subscriber!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, args...)
-#     push!(nodeio.subs, SubscribedMessage(msg, ZmqSubscriber(args...)))
-# end
 function add_subscriber!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, sub::Subscriber)
     push!(nodeio.subs, SubscribedMessage(msg, sub))
 end
@@ -208,6 +202,7 @@ function launch(node::Node)
 
         end lrl
         @info "Closing node $(getname(node))"
+        closeall(node)
     catch err
         if err isa InterruptException
             @info "Closing node $(getname(node))"
@@ -234,7 +229,7 @@ function closeall(node::Node)
     nodeio = getIO(node)
     # Close publishers and subscribers
     for submsg in nodeio.subs
-        close(submsg.sub)
+        forceclose(submsg.sub)
     end
     for pubmsg in nodeio.pubs
         close(pubmsg.pub)

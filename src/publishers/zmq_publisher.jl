@@ -29,6 +29,7 @@ struct ZmqPublisher <: Publisher
     ipaddr::Sockets.IPv4
     buffer::IOBuffer
     name::String
+    ctx::ZMQ.Context
 
     function ZmqPublisher(
         ctx::ZMQ.Context,
@@ -46,7 +47,7 @@ struct ZmqPublisher <: Publisher
             "Could not bind publisher $name to $(tcpstring(ipaddr, port))"
         )
         @info "Publishing $name on: $(tcpstring(ipaddr, port)), isopen = $(isopen(socket))"
-        new(socket, port, ipaddr, IOBuffer(), name)
+        new(socket, port, ipaddr, IOBuffer(), name, ctx)
     end
 end
 function ZmqPublisher(ctx::ZMQ.Context, ipaddr, port::Integer; name = genpublishername())
@@ -62,10 +63,6 @@ function ZmqPublisher(
     name = genpublishername(),
 )
     ZmqPublisher(ctx, ipaddr, parse(Int, port), name = name)
-end
-
-function Publisher(pub::ZmqPublisher)
-    return pub
 end
 
 Base.isopen(pub::ZmqPublisher) = Base.isopen(pub.socket)

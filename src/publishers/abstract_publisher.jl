@@ -6,10 +6,8 @@ getname(pub::Publisher)::String = pub.name
 
 function publish(pub::Publisher,
                  proto_msg::ProtoBuf.ProtoType)::Nothing
-    error("The `receive` method hasn't been implemented for your Publisher yet!")
+    throw(MercuryException("The `receive` method hasn't been implemented for your Publisher yet!"))
 end
-
-
 
 """
 Specifies a publisher along with specific message type.

@@ -38,6 +38,7 @@ struct ZmqSubscriber <: Subscriber
     name::String
     socket_lock::ReentrantLock
     flags::SubscriberFlags
+    should_finish::Threads.Atomic{Bool}
 
     function ZmqSubscriber(
         ctx::ZMQ.Context,
@@ -64,7 +65,9 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        new(socket, port, ipaddr, IOBuffer(), name, ReentrantLock(), SubscriberFlags())
+        @show isopen(socket)
+        should_finish = Threads.Atomic{Bool}(false)
+        new(socket, port, ipaddr, IOBuffer(), name, ReentrantLock(), SubscriberFlags(), should_finish)
     end
 end
 
@@ -90,7 +93,7 @@ end
 
 Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
 
-function Base.close(sub::ZmqSubscriber)
+function Base.close(sub::ZmqSubscriber, timeout=1)
     lock(sub.socket_lock) do
         @info "Closing ZmqSubscriber: $(getname(sub))"
         close(sub.socket)
@@ -108,12 +111,16 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     local bin_data
     lock(sub.socket_lock) do
         if isopen(sub)  # must take lock before checking if the socket is open
+            # bin_data = ZMQ.Message()
+            # bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
             bin_data = ZMQ.recv(sub.socket)
+
             # Once blocking is finished we know we've recieved a new message
             sub.flags.hasreceived = true
+            did_receive = true
+
             # Forces subscriber to conflate messages
             ZMQ.getproperty(sub.socket, :events)
-            did_receive = true
         end
     end
     sub.flags.isreceiving = false
@@ -136,14 +143,21 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
             receive(sub, buf, write_lock)
             GC.gc(false)
             yield()
+            if sub.should_finish[]
+                break
+            end
         end
+        close(sub)
         @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
     catch err
         sub.flags.diderror = true
         close(sub)
-        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
+        @show typeof(err)
         if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
-            @error err exception = (err, catch_backtrace())
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket errored out."
+            rethrow(err)
+        else
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was forcefully closed."
         end
     end
 
@@ -168,6 +182,8 @@ function publish_until_receive(
     timeout = 1.0,  # seconds
 )
     @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"
+    @assert isopen(pub) "Publisher must be open"
+    @assert isopen(sub) "Subscriber must be open"
     t_start = time()
     sub.flags.hasreceived = false
     while (time() - t_start < timeout)
@@ -177,5 +193,6 @@ function publish_until_receive(
             return true
         end
     end
+    @warn "Publish until receive timed out"
     return false
 end
