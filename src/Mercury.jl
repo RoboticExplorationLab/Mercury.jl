@@ -19,6 +19,7 @@ const libhg = libhg_library_filename
 
 greet() = print("Hello World!")
 include("utils.jl")
+include("rate_limiter.jl")
 
 include("publishers/abstract_publisher.jl")
 include("publishers/serial_publisher.jl")
