@@ -1,0 +1,69 @@
+title = "RExQuadMOCAP"
+
+[zmq]
+    [zmq.filtered_state]
+        name = "filtered_state"
+        desc = "State estimate from fusing IMU and Vicon MOCAP data"
+        server = "127.0.0.1"
+        port = "5004"
+    [zmq.imu]
+        name = "imu"
+        desc = "Raw ouput from onboard imu"
+        server = "127.0.0.1"
+        port = "5003"
+    [zmq.vicon]
+        name = "vicon"
+        server = "127.0.0.1"
+        port = "5002"
+    [zmq.motor_cmd]
+        name = "motor_cmd"
+        server = "127.0.0.1"
+        port = "5005"
+    [zmq.quad_info]
+        name = "quad_info"
+        server = "192.158.3.116"
+        port = "5006"
+    [zmq.quad_state]
+        name = "quat_state"
+        server = "192.168.3.117"
+        port = "5006"
+
+[serial]
+    [serial.sensor_data]
+        name = "sensor_data"
+        serial_port = "/dev/ttyACM0"
+        baud_rate = 57600
+    [serial.motors_arduino]
+        name = "motors_arduino"
+        serial_port = "/dev/ttyACM1"
+        baud_rate = 57600
+    [serial.vicon_raw]
+        name = "vicon_raw"
+        serial_port = "/dev/tty.usbmodem14201"
+        baud_rate = 57600
+
+[nodes]
+[jetson]
+    [jetson.filter]
+        pubs = ["filtered_state"]
+        subs = ["imu", "vicon"]
+    [jetson.controller]
+        pubs = ["motor_cmd"]
+        subs = ["filtered_state", "quad_state"]
+        serial_out = ["motors_arduino"]
+    [jetson.sensor_link]
+        pubs = ["vicon", "imu"]
+        serial_in = ["imu_raw", "vicon_raw"]
+    [jetson.jetson_link]
+        pubs = ["quad_info"]
+        subs = ["filtered_state", "quad_state", "motor_cmd"]
+[ground]
+    [ground.ground_link]
+        pubs = ["quad_state"]
+        subs = ["quad_info"]
+    [ground.vicon]
+        serial_out = ["vicon_raw"]
+    
+    
+
+    

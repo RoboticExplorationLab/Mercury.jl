@@ -3,15 +3,31 @@ using ZMQ
 using Sockets
 using Test
 using BenchmarkTools
+if !isdefined(@__MODULE__, :TestMsg)
+    include("jlout/test_msg_pb.jl")
+end
 
-@testset "Subscriber" begin
+# Hg.reset_sub_count()
+# ctx = ZMQ.Context()
+# addr = ip"127.0.0.1"
+# port = 5555
+# sub = Hg.ZmqSubscriber(ctx, addr, port)
+# isopen(sub)
+# msg = TestMsg(x=0,y=0,z=0)
+# subtask = @async Hg.subscribe(sub, msg, ReentrantLock())
+# istaskdone(subtask)
+# istaskfailed(subtask)
+# Hg.forceclose(sub)
+# wait(subtask)
+
+@testset "ZmqSubscriber" begin
     Hg.reset_sub_count()
     ctx = ZMQ.Context()
     addr = ip"127.0.0.1"
     port = 5555
 
     @testset "Construction" begin
-        sub = Hg.Subscriber(ctx, addr, port)
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
 
         @test isopen(sub)
         @test sub.port == port
@@ -20,13 +36,13 @@ using BenchmarkTools
         close(sub)
         @test !isopen(sub.socket)
 
-        sub = Hg.Subscriber(ctx, addr, string(port))
+        sub = Hg.ZmqSubscriber(ctx, addr, string(port))
         @test sub.port == port
         @test sub.ipaddr == addr
         @test sub.name == "subscriber_2"
         close(sub)
 
-        sub = Hg.Subscriber(ctx, string(addr), port)
+        sub = Hg.ZmqSubscriber(ctx, string(addr), port)
         @test sub.port == port
         @test sub.ipaddr == addr
         @test sub.name == "subscriber_3"
@@ -34,8 +50,8 @@ using BenchmarkTools
 
         # Create 2 subscribers
         @test_nowarn begin
-            sub1 = Hg.Subscriber(ctx, string(addr), port)
-            sub2 = Hg.Subscriber(ctx, string(addr), port)
+            sub1 = Hg.ZmqSubscriber(ctx, string(addr), port)
+            sub2 = Hg.ZmqSubscriber(ctx, string(addr), port)
             close(sub1)
             close(sub2)
         end
@@ -43,28 +59,37 @@ using BenchmarkTools
 
     @testset "Simple Pub/Sub" begin
         # Test simple pub/sub
-        sub = Hg.Subscriber(ctx, addr, port)
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
         @test isopen(sub)
         msg = TestMsg(x = 10, y = 11, z = 12)
-        rtask = @task Hg.receive(sub, msg)
+        rtask = @task Hg.receive(sub, msg, ReentrantLock())
         schedule(rtask)
-        istaskdone(rtask)
+        @test !istaskdone(rtask)
+        @test !istaskfailed(rtask)
 
-        pub = Hg.Publisher(ctx, addr, port)
+        pub = Hg.ZmqPublisher(ctx, addr, port)
         msg_out = TestMsg(x = 1, y = 2, z = 3)
         @test msg.x == 10
         @test msg.y == 11
         @test msg.z == 12
-        Hg.publish(pub, msg_out)
-        sleep(0.1)
+        cnt = 0
+        for i = 1:1000
+            msg_out.x = i
+            Hg.publish(pub, msg_out)
+            sleep(0.001)
+            if istaskdone(rtask)
+                cnt = i
+                break
+            end
+        end
+        @test sub.flags.hasreceived
         @test istaskdone(rtask)
-        @test msg.x == 1
+        @test msg.x == cnt   # The first many are "lost." It accepts the first one to be received.
         @test msg.y == 2
         @test msg.z == 3
         close(pub)
         close(sub)
     end
-
 
     @testset "Receive performance" begin
         ## Test receive performance
@@ -79,35 +104,56 @@ using BenchmarkTools
                 sleep(0.001)
             end
         end
-        sub = Hg.Subscriber(ctx, addr, port, name = "TestSub")
-        pub = Hg.Publisher(ctx, addr, port, name = "TestPub")
+        sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
+        pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
         msg = TestMsg(x = 10, y = 11, z = 12)
+        msg_out = TestMsg(x = 1, y = 2, z = 3)
 
-        # Publish message in a separate task (really fast)
-        global do_publish = true
-        pub_task = @task pub_message(pub)
-        schedule(pub_task)
-        @test !istaskdone(pub_task)
+        # Close the task by waiting for a receive
+        sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
+        schedule(sub_task)
+        cnt = 0
+        timeout = 5.0 # seconds
+        @test Hg.publish_until_receive(pub, sub, msg_out, timeout)
+        @test !istaskdone(sub_task)
+        # sleep(1.0)
+        @show sub.flags.hasreceived
+        @test msg.x == msg_out.x
+        close_task = @async close(sub)
+        @test !istaskdone(close_task)  # waiting for receive to finish
+        @test isopen(sub)
+        @test isopen(pub)
+        @test sub.flags.isreceiving
+        @test islocked(sub.socket_lock)
 
-        # Make sure it doesn't have any garbage collection time
-        b = @benchmark Hg.receive($sub, $msg)
-        @test maximum(b.gctimes) == 0
-        do_publish = false
+        sub.flags.hasreceived = false
+        Hg.publish_until_receive(pub, sub, msg_out)
+        @test sub.flags.hasreceived
         sleep(0.1)
-        @test istaskdone(pub_task)
+        @test istaskdone(close_task)  # should be closed now that the receive finished
+        @test !isopen(sub)
+        sleep(0.1)  # sleep to wait for socket to close and the subscribe loop to exit
+        @test istaskdone(sub_task)  # the subscriber task should finish after the socket is closed
+        @test !istaskfailed(sub_task)  # The task shouldn't end with an error
         close(pub)
-        close(sub)
 
-
-        # Check that receive doesn't error after closing the port
-        # but should print a warning message
-        @test_logs (:warn, r"Attempting to receive.*TestSub.*which is closed") Hg.receive(
-            sub,
-            msg,
-        )
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
+        pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
+        sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
+        schedule(sub_task)
+        Hg.publish_until_receive(pub, sub, msg_out)
+        !istaskdone(sub_task)
+        Hg.forceclose(sub)
+        sleep(0.1)  # wait for the task to finish
+        @test istaskdone(sub_task)  # the subscriber task should finish after the socket is closed
+        @test !istaskfailed(sub_task) # the EOFError should be caught
+        @test !isopen(sub)
+        @test isopen(pub)
+        close(pub)
+        @test !isopen(pub)
     end
 
-        @testset "Testing Subscriber Conflate" begin
+    @testset "Testing Subscriber Conflate" begin
         ## Test receive performance
         function pub_message(pub)
             rate = 100  # Publishing at 100 Hz
@@ -124,8 +170,8 @@ using BenchmarkTools
             end lrl
         end
 
-        sub = Hg.Subscriber(ctx, addr, port, name = "TestSub")
-        pub = Hg.Publisher(ctx, addr, port, name = "TestPub")
+        sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
+        pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
         msg = TestMsg(x = 10, y = 11, z = 12)
 
         # Publish message in a separate task (really fast)
