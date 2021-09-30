@@ -6,21 +6,23 @@ mutable struct SerialSubscriber <: Subscriber
 
     name::String
 
-    read_buffer::StaticArrays.MVector{SERIAL_PORT_BUFFER_SIZE, UInt8}
+    read_buffer::StaticArrays.MVector{SERIAL_PORT_BUFFER_SIZE,UInt8}
 
-    proto_msg_size::Union{Int64, Nothing}
+    proto_msg_size::Union{Int64,Nothing}
 
-    msg_in_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE, UInt8}
+    msg_in_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
     msg_in_length::Int64
 
     flags::SubscriberFlags
 
-    function SerialSubscriber(serial_port::LibSerialPort.SerialPort;
-                              name = gensubscribername(),
-                              )
-        @catchserial(LibSerialPort.open(serial_port),
-                    "Failed to connect to serial port: `$(LibSerialPort.Lib.sp_get_port_name(serial_port.ref))`"
-                    )
+    function SerialSubscriber(
+        serial_port::LibSerialPort.SerialPort;
+        name = gensubscribername(),
+    )
+        @catchserial(
+            LibSerialPort.open(serial_port),
+            "Failed to connect to serial port: `$(LibSerialPort.Lib.sp_get_port_name(serial_port.ref))`"
+        )
 
         # Buffer for dumping read bytes into
         read_buffer = StaticArrays.@MVector zeros(UInt8, SERIAL_PORT_BUFFER_SIZE)
@@ -40,14 +42,11 @@ mutable struct SerialSubscriber <: Subscriber
             msg_in_buffer,
             msg_in_length,
             SubscriberFlags(),
-            )
+        )
     end
 end
 
-function SerialSubscriber(port_name::String,
-                          baudrate::Int64;
-                          name = gensubscribername(),
-                          )
+function SerialSubscriber(port_name::String, baudrate::Int64; name = gensubscribername())
     local sp
     @catchserial(
         begin
@@ -55,7 +54,7 @@ function SerialSubscriber(port_name::String,
             LibSerialPort.close(sp)
         end,
         "Failed to connect to serial port at: `$port_name`"
-        )
+    )
 
     return SerialSubscriber(sp; name = name)
 end
@@ -75,12 +74,12 @@ read buffer if found complete message and nothing otherwise.
 """
 function Base.readuntil(sub::SerialSubscriber, delim::UInt8)
     if isopen(sub) && (bytesavailable(sub.serial_port) > 0)
-        for i in 1:length(sub.read_buffer)
+        for i = 1:length(sub.read_buffer)
             # Read one byte from LibSerialPort.SerialPort buffer into publishers
             # local buffer one byte at a time until delim byte encoutered then return
             sub.read_buffer[i] = read(sub.serial_port, UInt8)
             if sub.read_buffer[i] == delim #0x00
-                return @view sub.read_buffer[max(1,i+1-MSG_BLOCK_SIZE):i]
+                return @view sub.read_buffer[max(1, i + 1 - MSG_BLOCK_SIZE):i]
             end
         end
     end
@@ -97,7 +96,8 @@ to decode message block.
 function decode(sub::SerialSubscriber, msg::AbstractVector{UInt8})
     incoming_msg_size = length(msg)
     incoming_msg_size == 0 && error("Empty message passed to encode!")
-    incoming_msg_size > MSG_BLOCK_SIZE && error("Can only safely encode 256 bytes at a time")
+    incoming_msg_size > MSG_BLOCK_SIZE &&
+        error("Can only safely encode 256 bytes at a time")
 
     if !any(msg .== 0x00)
         return nothing
@@ -137,10 +137,11 @@ end
 """
 Returns `true` if successfully read message from serial port
 """
-function receive(sub::SerialSubscriber,
-                 proto_msg::ProtoBuf.ProtoType,
-                 write_lock::ReentrantLock,
-                 )
+function receive(
+    sub::SerialSubscriber,
+    proto_msg::ProtoBuf.ProtoType,
+    write_lock::ReentrantLock,
+)
     # Make sure that proto_msg_size is initialized
     set_proto_msg_size!(sub, proto_msg)
 
@@ -157,14 +158,14 @@ function receive(sub::SerialSubscriber,
             # @info "Recieved: $(length(encoded_msg)), Expected: $(sub.proto_msg_size)"
 
             # if length(decoded_msg) == sub.proto_msg_size
-                # @info "Decoded Message"
+            # @info "Decoded Message"
 
-                lock(write_lock) do
-                    ProtoBuf.readproto(IOBuffer(decoded_msg), proto_msg)
-                end
+            lock(write_lock) do
+                ProtoBuf.readproto(IOBuffer(decoded_msg), proto_msg)
+            end
 
-                sub.flags.hasreceived = true
-                return true
+            sub.flags.hasreceived = true
+            return true
             # end
         end
 
@@ -177,10 +178,11 @@ end
 """
 Loops recieve(sub::Subscriber, proto_msg::ProtoBuf.ProtoType, write_lock=ReentrantLock())
 """
-function subscribe(sub::SerialSubscriber,
-                   proto_msg::ProtoBuf.ProtoType,
-                   write_lock::ReentrantLock,
-                   )
+function subscribe(
+    sub::SerialSubscriber,
+    proto_msg::ProtoBuf.ProtoType,
+    write_lock::ReentrantLock,
+)
     @info "$(sub.name): Listening for message type: $(typeof(proto_msg)), on: $(portstring(sub))"
 
     try
@@ -194,14 +196,15 @@ function subscribe(sub::SerialSubscriber,
         sub.flags.diderror = true
         close(sub)
         @warn "Shutting Down $(typeof(proto_msg)) subscriber: $(portstring(sub))"
-        @error err exception=(err, catch_backtrace())
+        @error err exception = (err, catch_backtrace())
     end
 
     return nothing
 end
 
 
-portstring(sub::SerialSubscriber) = "Serial Port-" * LibSerialPort.Lib.sp_get_port_name(sub.serial_port.ref)
+portstring(sub::SerialSubscriber) =
+    "Serial Port-" * LibSerialPort.Lib.sp_get_port_name(sub.serial_port.ref)
 
 """
 Helper function to set the proto_msg_size attribute of a SerialSubscriber.
@@ -213,8 +216,8 @@ function set_proto_msg_size!(sub::SerialSubscriber, proto_msg::ProtoBuf.ProtoTyp
         sub.proto_msg_size = ProtoBuf.writeproto(IOBuffer(), proto_msg)
     end
 
-    if !(0 < sub.proto_msg_size < MSG_BLOCK_SIZE-2)
+    if !(0 < sub.proto_msg_size < MSG_BLOCK_SIZE - 2)
         err = ErrorException()
-        @error err exception=(err, catch_backtrace())
+        @error err exception = (err, catch_backtrace())
     end
 end

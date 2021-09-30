@@ -88,4 +88,3 @@ macro catchserial(expr, errmsg)
 end
 
 tcpstring(ipaddr, port) = "tcp://" * string(ipaddr) * ":" * string(port)
-

@@ -67,7 +67,16 @@ struct ZmqSubscriber <: Subscriber
         @info "Subscribing $name to: tcp://$ipaddr:$port"
         @show isopen(socket)
         should_finish = Threads.Atomic{Bool}(false)
-        new(socket, port, ipaddr, IOBuffer(), name, ReentrantLock(), SubscriberFlags(), should_finish)
+        new(
+            socket,
+            port,
+            ipaddr,
+            IOBuffer(),
+            name,
+            ReentrantLock(),
+            SubscriberFlags(),
+            should_finish,
+        )
     end
 end
 
@@ -93,7 +102,7 @@ end
 
 Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
 
-function Base.close(sub::ZmqSubscriber, timeout=1)
+function Base.close(sub::ZmqSubscriber, timeout = 1)
     lock(sub.socket_lock) do
         @info "Closing ZmqSubscriber: $(getname(sub))"
         close(sub.socket)

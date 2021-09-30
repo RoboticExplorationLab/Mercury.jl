@@ -47,11 +47,11 @@ mutable struct LoopRateLimiter{UseSleep}
     end
 end
 function LoopRateLimiter(rate; N_batch = 10)
-    use_sleep = rate < 50 
+    use_sleep = rate < 50
     LoopRateLimiter{use_sleep}(rate, N_batch = N_batch)
 end
 
-doesblock(::LoopRateLimiter{UseSleep}) where UseSleep = !UseSleep 
+doesblock(::LoopRateLimiter{UseSleep}) where {UseSleep} = !UseSleep
 
 """
     reset!(::LoopRateLimiter)
@@ -115,12 +115,12 @@ limiter. Has a minimum sleep time of 1 microsecond (relies on the `usleep` C fun
             # if lrl.use_sleep 
             #     sleep(us_diff / 1e6)
             # else
-                # tsleep = @async usleep(us_diff)
-                # while (!istaskdone(tsleep))
-                # end
-                # usleep(us_diff)
-                # yield()
-                # wait(tsleep)
+            # tsleep = @async usleep(us_diff)
+            # while (!istaskdone(tsleep))
+            # end
+            # usleep(us_diff)
+            # yield()
+            # wait(tsleep)
             # end
             # sleep(us_diff / 1000.0)
         end

@@ -20,7 +20,9 @@ end
 mutable struct SerializedVICON
     vicon::SerializedVICONcpp
 end
-Base.zero(::Type{SerializedVICON}) = SerializedVICON(SerializedVICONcpp(zero(UInt8), false, zero(UInt16), zeros(UInt32, 8)...))
+Base.zero(::Type{SerializedVICON}) = SerializedVICON(
+    SerializedVICONcpp(zero(UInt8), false, zero(UInt16), zeros(UInt32, 8)...),
+)
 
 """
 Specifies a subcriber along with specific message type.
@@ -31,7 +33,7 @@ struct SubscribedVICON
     sub::Subscriber
     name::String
 
-    function SubscribedVICON(sub::Subscriber; name=getname(sub))
+    function SubscribedVICON(sub::Subscriber; name = getname(sub))
         msg = zero(SerializedVICON)
         new(msg, sub, name)
     end
@@ -50,10 +52,7 @@ end
 """
 Useful functions for communicating with serial VICON
 """
-function receive(
-    sub::ZmqSubscriber,
-    msg::SerializedVICON,
-)
+function receive(sub::ZmqSubscriber, msg::SerializedVICON)
     if isopen(sub)
         sub.flags.isreceiving = true
 
@@ -72,10 +71,7 @@ function receive(
     end
 end
 
-function subscribe(
-    sub::ZmqSubscriber,
-    msg::SerializedVICON,
-)
+function subscribe(sub::ZmqSubscriber, msg::SerializedVICON)
     @info "$(sub.name): Listening for SerializedVICON message, on: $(tcpstring(sub))"
 
     try
@@ -89,7 +85,7 @@ function subscribe(
         sub.flags.diderror = true
         close(sub)
         @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
-        @error err exception=(err, catch_backtrace())
+        @error err exception = (err, catch_backtrace())
     end
 
     return nothing

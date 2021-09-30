@@ -11,17 +11,19 @@ mutable struct SerialPublisher <: Publisher
     name::String
 
     # Buffer for encoded messages
-    msg_out_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE, UInt8}
+    msg_out_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
     msg_out_length::Int64
 
-    function SerialPublisher(serial_port::LibSerialPort.SerialPort;
-                             name = genpublishername(),
-                             )
+    function SerialPublisher(
+        serial_port::LibSerialPort.SerialPort;
+        name = genpublishername(),
+    )
         port_name = LibSerialPort.Lib.sp_get_port_name(serial_port.ref)
         sp_name = "Serial Port-$(LibSerialPort.Lib.sp_get_port_name(serial_port.ref))"
-        @catchserial(LibSerialPort.open(serial_port),
-                     "Failed to open SerialPort at serial_port $port_name" 
-                     )
+        @catchserial(
+            LibSerialPort.open(serial_port),
+            "Failed to open SerialPort at serial_port $port_name"
+        )
 
         # Vector written to when encoding Protobuf using COBS protocol
         msg_out_buffer = StaticArrays.@MVector zeros(UInt8, MSG_BLOCK_SIZE)
@@ -38,10 +40,7 @@ end
 Create a publisher attached to the serial port at `port_name` with a communicate rate of 
 `baudrate`. Automatically tries to open the port.
 """
-function SerialPublisher(port_name::String,
-                         baudrate::Integer;
-                         name = genpublishername(),
-                         )
+function SerialPublisher(port_name::String, baudrate::Integer; name = genpublishername())
     local sp
     @catchserial(
         begin
@@ -49,7 +48,7 @@ function SerialPublisher(port_name::String,
             LibSerialPort.close(sp)
         end,
         "Failed to open Serial Port at $port_name"
-        )
+    )
 
     return SerialPublisher(sp; name = name)
 end
@@ -93,7 +92,7 @@ function encodeCOBS(pub::SerialPublisher, payload::AbstractVector{UInt8})
     pub.msg_out_buffer[pub.msg_out_length-1] = acc
 
     # Reverse the msg_buffer
-    reverse!(pub.msg_out_buffer, 1, pub.msg_out_length-1)
+    reverse!(pub.msg_out_buffer, 1, pub.msg_out_length - 1)
     # Add on end flag to message
     pub.msg_out_buffer[pub.msg_out_length] = 0x00
     # Return a view into the msg buffer of just critical part of the buffer
@@ -117,11 +116,13 @@ end
 function publish(pub::SerialPublisher, msg)
     if isopen(pub)
         length(msg) == 0 && throw(MercuryException("Empty message passed to encode!"))
-        length(msg) > 254 && throw(MercuryException("Can only safely encode 254 bytes at a time"))
+        length(msg) > 254 &&
+            throw(MercuryException("Can only safely encode 254 bytes at a time"))
         encode!(pub, msg)
         write(pub.serial_port, @view pub.msg_out_buffer[1:pub.msg_out_length])
     end
     return nothing
 end
 
-portstring(sub::SerialPublisher) = "Serial Port-" * LibSerialPort.Lib.sp_get_port_name(sub.serial_port.ref)
+portstring(sub::SerialPublisher) =
+    "Serial Port-" * LibSerialPort.Lib.sp_get_port_name(sub.serial_port.ref)

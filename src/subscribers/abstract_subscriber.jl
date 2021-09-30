@@ -17,8 +17,10 @@ end
 
 abstract type Subscriber end
 
-Base.isopen(sub::Subscriber)::Nothing = error("The `isopen` method hasn't been implemented for your Subscriber yet!")
-Base.close(sub::Subscriber)::Nothing = error("The `close` method hasn't been implemented for your Subscriber yet!")
+Base.isopen(sub::Subscriber)::Nothing =
+    error("The `isopen` method hasn't been implemented for your Subscriber yet!")
+Base.close(sub::Subscriber)::Nothing =
+    error("The `close` method hasn't been implemented for your Subscriber yet!")
 # Base.can_close(sub::Subscriber)::Nothing = error("The `can_close` method hasn't been implemented for your Subscriber yet!")
 getname(sub::Subscriber)::String = sub.name
 getflags(sub::Subscriber)::SubscriberFlags = sub.flags
@@ -37,20 +39,20 @@ function decode!(buf::ProtoBuf.ProtoType, bin_data)
 end
 
 function decode!(buf::AbstractVector{UInt8}, bin_data)
-    for i = 1:min(length(buf), length(bin_data)) 
-        buf[i] = bin_data[i];
+    for i = 1:min(length(buf), length(bin_data))
+        buf[i] = bin_data[i]
     end
 end
 
-function receive(sub::Subscriber,
-                 buf, 
-                 write_lock::ReentrantLock = ReentrantLock())::Nothing
+function receive(sub::Subscriber, buf, write_lock::ReentrantLock = ReentrantLock())::Nothing
     error("The `receive` method hasn't been implemented for your Subscriber yet!")
 end
 
-function subscribe(sub::Subscriber,
-                   buf, 
-                   write_lock::ReentrantLock = ReentrantLock())::Nothing
+function subscribe(
+    sub::Subscriber,
+    buf,
+    write_lock::ReentrantLock = ReentrantLock(),
+)::Nothing
     error("The `subscribe` method hasn't been implemented for your Subscriber yet!")
 end
 
@@ -64,7 +66,11 @@ struct SubscribedMessage
     lock::ReentrantLock
     name::String
 
-    function SubscribedMessage(msg::ProtoBuf.ProtoType, sub::Subscriber; name=getname(sub))
+    function SubscribedMessage(
+        msg::ProtoBuf.ProtoType,
+        sub::Subscriber;
+        name = getname(sub),
+    )
         new(msg, sub, ReentrantLock(), name)
     end
 end
@@ -89,7 +95,7 @@ function on_new(func::Function, submsg::SubscribedMessage)
         # TODO: is lock needed here
         # Lock Message while performing operations on it
         # lock(submsg.lock) do
-            func(submsg.msg)
+        func(submsg.msg)
         # end
         got_new!(submsg.sub)
     end

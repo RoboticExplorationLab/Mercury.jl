@@ -7,7 +7,7 @@ Base.@kwdef mutable struct RateInfo
     name::String = ""
 end
 
-function init(rate::RateInfo, name::String) 
+function init(rate::RateInfo, name::String)
     rate.name = name
     if rate.cnt == 0
         rate.t_start = time_ns()

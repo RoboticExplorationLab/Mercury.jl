@@ -157,7 +157,7 @@ setupIO!(::Node, ::NodeIO) =
 
 # These methods can be overwritten as needed
 startup(::Node)::Nothing = nothing
-getcontext(node::Node)::Union{Nothing, ZMQ.Context} = getIO(node).ctx
+getcontext(node::Node)::Union{Nothing,ZMQ.Context} = getIO(node).ctx
 getrate(node::Node)::Float64 = node.rate
 getIO(node::Node)::NodeIO = node.nodeio
 function isnodedone(node::Node)::Bool
@@ -167,7 +167,7 @@ function isnodedone(node::Node)::Bool
     return node.should_finish || finished_sub
 end
 
-function getname(::T) where {T <: Node}
+function getname(::T) where {T<:Node}
     # Note that this only works well when each node is only instantiated once
     return string(T)
 end
@@ -209,7 +209,7 @@ function launch(node::Node)
             # Close everything
             closeall(node)
         else
-            @error err exception=(err, catch_backtrace())
+            @error err exception = (err, catch_backtrace())
         end
     end
 end
@@ -245,6 +245,7 @@ end
 
 function node_sockets_are_open(node::Node)
     nodeio = getIO(node)
-    return (all([isopen(submsg.sub) for submsg in nodeio.subs]) &&
-            all([isopen(pubmsg.pub) for pubmsg in nodeio.pubs]))
+    return (
+        all([isopen(submsg.sub) for submsg in nodeio.subs]) && all([isopen(pubmsg.pub) for pubmsg in nodeio.pubs])
+    )
 end
