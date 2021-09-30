@@ -102,20 +102,21 @@ error = (rate - runrate_macro4(mykernel, rate, test_time)) / rate * 100
 
 rate = 40 
 test_time = 0.1 # sec
+thresh = 6  # percent error
 lrl = LoopRateLimiter(rate)
 @test !Hg.doesblock(lrl)
 runrate(mykernel, lrl, test_time)
 error = (rate - median(runrate(mykernel, lrl, test_time))) / rate * 100
-@test error < 5  # less than 5% error
+@test error < thresh
 
 error = (rate - runrate_macro1(mykernel, Val(rate), test_time)) / rate * 100
-@test error < 5  # less than 5% error
+@test error < thresh
 error = (rate - runrate_macro2(mykernel, rate, test_time)) / rate * 100
-@test error < 5  # less than 5% error
+@test error < thresh
 error = (rate - runrate_macro3(mykernel, Val(rate), test_time)) / rate * 100
-@test error < 5  # less than 5% error
+@test error < thresh 
 error = (rate - runrate_macro4(mykernel, rate, test_time)) / rate * 100
-@test error < 5  # less than 5% error
+@test error < thresh 
 
 end
 
