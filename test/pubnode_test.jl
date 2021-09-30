@@ -27,7 +27,7 @@ struct PubNode <: Hg.Node
         should_finish = false
 
         test_msg = TestMsg(x = 10, y = 10, z = 10)
-        test_msg_pub = Hg.ZmqPublisher(pubNodeIO.ctx, addr, port)
+        test_msg_pub = Hg.ZmqPublisher(pubNodeIO.ctx, ADDR, PORT)
         Hg.add_publisher!(pubNodeIO, test_msg, test_msg_pub)
 
         return new(pubNodeIO, rate, should_finish,

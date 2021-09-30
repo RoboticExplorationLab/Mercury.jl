@@ -64,7 +64,7 @@ end
     end
 
     @testset "SerialPublisher" begin
-        if length(get_port_list()) > 0
+        if length(get_port_list()) > 0 && !haskey(ENV, "CI")
             port_name = get_port_list()[1]
             pub = Hg.SerialPublisher(port_name, 57600);
             @test isopen(pub)
