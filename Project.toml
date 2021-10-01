@@ -13,4 +13,5 @@ ZMQ = "c2297ded-f4af-51ae-bb23-16f91089e4e1"
 
 [compat]
 ProtoBuf = "0.11"
+StaticArrays = "1"
 ZMQ = "1"
