@@ -1,3 +1,14 @@
+
+Base.@kwdef mutable struct NodeOptions
+    rate::Float64 = 100
+end
+
+Base.@kwdef mutable struct NodeFlags
+    did_error::Bool = false
+    is_running::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
+    should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
+end
+
 """
     NodeIO
 
@@ -14,12 +25,11 @@ struct NodeIO
     pubs::Vector{PublishedMessage}
     subs::Vector{SubscribedMessage}
     sub_tasks::Vector{Task}
+    opts::NodeOptions
+    flags::NodeFlags
 
-    function NodeIO(ctx::ZMQ.Context)
-        new(ctx, PublishedMessage[], SubscribedMessage[], Task[])
-    end
-    function NodeIO()
-        new(nothing, PublishedMessage[], SubscribedMessage[], Task[])
+    function NodeIO(ctx::ZMQ.Context=ZMQ.context(); opts...)
+        new(ctx, PublishedMessage[], SubscribedMessage[], Task[], NodeOptions(opts...), NodeFlags())
     end
 end
 
@@ -146,7 +156,9 @@ recommended that this is launched asynchronously via
 """
 abstract type Node end
 
-# These methods must be implemented
+##############################
+# REQUIRED INTERFACE
+##############################
 compute(::Node)::Nothing =
     error("The `compute` method hasn't been implemented for your node yet!")
 
@@ -155,24 +167,99 @@ compute(::Node)::Nothing =
 setupIO!(::Node, ::NodeIO) =
     error("The `setupIO` method hasn't been implemented for your node yet!")
 
-# These methods can be overwritten as needed
+##############################
+# OPTIONAL INTERFACE
+##############################
 startup(::Node)::Nothing = nothing
 getcontext(node::Node)::Union{Nothing,ZMQ.Context} = getIO(node).ctx
-getrate(node::Node)::Float64 = node.rate
 getIO(node::Node)::NodeIO = node.nodeio
-function isnodedone(node::Node)::Bool
-    nodeio = getIO(node)
-    finished_sub = any(istaskdone.(nodeio.sub_tasks))
-
-    return node.should_finish || finished_sub
-end
 
 function getname(::T) where {T<:Node}
     # Note that this only works well when each node is only instantiated once
     return string(T)
 end
 
-# These methods should not be changed
+##############################
+# PROVIDED INTERFACE (don't change)
+##############################
+getoptions(node::Node) = getIO(node).opts
+getflags(node::Node) = getIO(node).flags
+getrate(node::Node)::Float64 = getoptions(node).rate 
+function isnodedone(node::Node)::Bool
+    nodeio = getIO(node)
+    finished_sub = any(istaskdone.(nodeio.sub_tasks))
+    return getflags(node).should_finish[] || finished_sub
+end
+function stopnode(node::Node; timeout=1.0)
+    getflags(node).should_finish[] = true
+    t_start = time() 
+    while (time() - t_start < timeout)
+        yield()
+        if !(getflags(node).is_running[])
+            return true
+        end
+    end
+    # If it doesn't stop in time, forcefully close the node
+    @warn "Node timed out. Forcefully closing the node."
+    closeall(node)
+    return false
+end
+
+publishers(node::Node) = getIO(node).pubs
+subscribers(node::Node) = getIO(node).subs
+
+for pubsub in ((:publisher, :pubs), (:subscriber, :subs))
+    @eval $(Symbol("get", pubsub[1]))(node::Node, index::Integer) = getIO(node).$(pubsub[2])[index]
+    @eval function $(Symbol("get", pubsub[1]))(node::Node, name::String)
+        index = findfirst(getIO(node).$(pubsub[2])) do msg
+            getname(msg) == name
+        end
+        if !isnothing(index)
+            return $(Symbol("get", pubsub[1]))(node, index)
+        end
+        return nothing
+    end
+    @eval $(Symbol("num", pubsub[1], "s"))(node::Node) = length(getIO(node).$(pubsub[2]))
+end
+
+"""
+    numsubscribers(node)
+
+Get the number of ZMQ subscribers attached to the node
+"""
+numsubscribers
+
+"""
+    numpublishers(node)
+
+Get the number of ZMQ publishers attached to the node
+"""
+numpublishers
+
+"""
+    getsubscriber(node, index)
+    getsubscriber(node, name)
+   
+Get a  [`SubscribedMessage`](@ref) attached to `node`, either by it's integer index or it's name.
+"""
+getsubscriber
+
+"""
+    getpublisher(node, index)
+    getpublisher(node, name)
+   
+Get a  [`PublishedMessage`](@ref) attached to `node`, either by it's integer index or it's name.
+"""
+getpublisher
+
+"""
+    launch(node)
+
+Run the main loop of the node indefinately. This method automatically sets up any necessary
+subscriber tasks and then calls the `compute` method at a fixed rate.
+
+This method should typically be wrapped in an `@async` or `@spawn` call.
+"""
 function launch(node::Node)
     rate = getrate(node)
     lrl = LoopRateLimiter(rate)
@@ -186,6 +273,7 @@ function launch(node::Node)
     # cnt = 0
     # start_time = time()
 
+    getflags(node).is_running[] = true
     try
         @rate while !isnodedone(node)
             compute(node)
@@ -205,20 +293,24 @@ function launch(node::Node)
         closeall(node)
     catch err
         if err isa InterruptException
-            @info "Closing node $(getname(node))"
+            @info "Closing node $(getname(node)). Got Keyboard Interrupt."
             # Close everything
-            closeall(node)
         else
-            @error err exception = (err, catch_backtrace())
+            @warn "Closing node $(getname(node)). Closed with error."
+            getflags(node).did_error = true
+            rethrow(err)
         end
+        closeall(node)
     end
+    getflags(node).is_running[] = false 
 end
 
 function start_subscribers(node::Node)
     nodeio = getIO(node)
 
     for submsg in nodeio.subs
-        sub_task = @async subscribe(submsg)
+        sub_task = launchtask(submsg)
+        # sub_task = @async subscribe(submsg)
         push!(nodeio.sub_tasks, sub_task)
     end
 end
@@ -248,4 +340,25 @@ function node_sockets_are_open(node::Node)
     return (
         all([isopen(submsg.sub) for submsg in nodeio.subs]) && all([isopen(pubmsg.pub) for pubmsg in nodeio.pubs])
     )
+end
+
+function printstatus(node::Node)
+    is_running = getflags(node).is_running[]
+    printstyled("Node name: ", bold=true); println(getname(node))
+    printstyled("  Is running? ", bold=true); println(is_running)
+    if !is_running
+        printstyled("  Did error? ", bold=true); println(getflags(node).did_error)
+    end
+    if (numpublishers(node) > 0)
+        printstyled("  Publishers:\n", bold=true)
+        for pub in publishers(node)
+            printstatus(pub, indent=4)
+        end
+    end
+    if (numsubscribers(node) > 0)
+        printstyled("  Subscribers:\n", bold=true)
+        for sub in subscribers(node)
+            printstatus(sub, indent=4)
+        end
+    end
 end

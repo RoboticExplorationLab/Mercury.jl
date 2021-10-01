@@ -7,8 +7,8 @@ Write data over a serial port.
 """
 mutable struct SerialPublisher <: Publisher
     serial_port::LibSerialPort.SerialPort
-
     name::String
+    has_published::Threads.Atomic{Bool}
 
     # Buffer for encoded messages
     msg_out_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
@@ -30,7 +30,8 @@ mutable struct SerialPublisher <: Publisher
         msg_out_length = 0
 
         @info "Publishing $name on: $sp_name"
-        new(serial_port, name, msg_out_buffer, msg_out_length)
+        has_published = Threads.Atomic{Bool}(false)
+        new(serial_port, name, has_published, msg_out_buffer, msg_out_length)
     end
 end
 
@@ -53,6 +54,7 @@ function SerialPublisher(port_name::String, baudrate::Integer; name = genpublish
     return SerialPublisher(sp; name = name)
 end
 
+getcomtype(::SerialPublisher) = :serial
 
 Base.isopen(pub::SerialPublisher) = LibSerialPort.isopen(pub.serial_port)
 function Base.close(pub::SerialPublisher)
@@ -120,6 +122,7 @@ function publish(pub::SerialPublisher, msg)
             throw(MercuryException("Can only safely encode 254 bytes at a time"))
         encode!(pub, msg)
         write(pub.serial_port, @view pub.msg_out_buffer[1:pub.msg_out_length])
+        pub.has_published[] = true
     end
     return nothing
 end

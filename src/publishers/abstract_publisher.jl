@@ -26,5 +26,14 @@ struct PublishedMessage
         new(msg, pub, name)
     end
 end
-publish(pubmsg::PublishedMessage) = publish(pubmsg.pub, pubmsg.msg)
-getname(pubmsg::PublishedMessage) = pubmsg.name
+@inline publish(pubmsg::PublishedMessage) = publish(pubmsg.pub, pubmsg.msg)
+@inline getname(pubmsg::PublishedMessage) = pubmsg.name
+@inline getcomtype(pub::PublishedMessage) = getcomtype(pub.pub)
+
+function printstatus(pub::PublishedMessage; indent=0)
+    prefix = " " ^ indent
+    println(prefix, "Publisher: ", getname(pub))
+    println(prefix, "  Type: ", getcomtype(pub))
+    println(prefix, "  Message Type: ", typeof(pub.msg))
+    println(prefix, "  Has published? ", pub.pub.has_published[])
+end
