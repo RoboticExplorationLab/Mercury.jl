@@ -44,7 +44,6 @@ struct ZmqSubscriber <: Subscriber
         ctx::ZMQ.Context,
         ipaddr::Sockets.IPv4,
         port::Integer;
-        timeout_ms::Integer = 1000,
         name = gensubscribername(),
     )
         local socket
@@ -67,7 +66,6 @@ struct ZmqSubscriber <: Subscriber
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
         should_finish = Threads.Atomic{Bool}(false)
-        ZMQ._set_rcvtimeo(socket, timeout_ms)
         new(
             socket,
             port,
@@ -97,10 +95,6 @@ function ZmqSubscriber(
     ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
 
-function settimeout!(sub::ZmqSubscriber, timeout_ms::Integer)
-    ZMQ._set_rcvtimeo(socket, timeout_ms)
-end
-
 getcomtype(::ZmqSubscriber) = :zmq
 Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
 
@@ -123,7 +117,7 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     lock(sub.socket_lock) do
         if isopen(sub)  # must take lock before checking if the socket is open
             bin_data = ZMQ.Message()
-            bytes_read = ZMQ.msg_recv(sub.socket, bin_data, 0)
+            bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
             if bytes_read == -1
                 ZMQ.zmq_errno() == ZMQ.EAGAIN || throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
             else
