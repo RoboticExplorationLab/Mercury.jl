@@ -1,14 +1,19 @@
-const MSG_BLOCK_SIZE = 256
 const SERIAL_PORT_BUFFER_SIZE = 1024
+const MSG_BLOCK_SIZE = 256
 
 mutable struct SerialSubscriber <: Subscriber
     serial_port::LibSerialPort.SerialPort
     name::String
-    read_buffer::StaticArrays.MVector{SERIAL_PORT_BUFFER_SIZE,UInt8}
+
+    # Flags denoting start and end of message
+    # header_flag::UInt32
+    # footer_flag::UInt32
+
+    # read_buffer::StaticArrays.MVector{SERIAL_PORT_BUFFER_SIZE,UInt8}
     msg_in_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
     msg_in_length::Int64
+
     flags::SubscriberFlags
-    should_finish::Threads.Atomic{Bool}
 
     function SerialSubscriber(
         serial_port::LibSerialPort.SerialPort;
@@ -20,17 +25,13 @@ mutable struct SerialSubscriber <: Subscriber
         )
 
         # Buffer for dumping read bytes into
-        read_buffer = StaticArrays.@MVector zeros(UInt8, SERIAL_PORT_BUFFER_SIZE)
-
-        # Vector written to when encoding Protobuf using COBS protocol
         msg_in_buffer = StaticArrays.@MVector zeros(UInt8, MSG_BLOCK_SIZE)
         msg_in_length = 0
 
-        @info "Subscribing $name on serial port"
+        @info "Subscribing $name on serial port: `$(LibSerialPort.Lib.sp_get_port_name(serial_port.ref))`"
         new(
             serial_port,
             name,
-            read_buffer,
             msg_in_buffer,
             msg_in_length,
             SubscriberFlags(),
@@ -38,7 +39,12 @@ mutable struct SerialSubscriber <: Subscriber
     end
 end
 
-function SerialSubscriber(port_name::String, baudrate::Int64; name = gensubscribername())
+function SerialSubscriber(
+    port_name::String,
+    baudrate::Int64;
+    name = gensubscribername()
+    )
+
     local sp
     @catchserial(
         begin
@@ -47,8 +53,7 @@ function SerialSubscriber(port_name::String, baudrate::Int64; name = gensubscrib
         end,
         "Failed to connect to serial port at: `$port_name`"
     )
-
-    return SerialSubscriber(sp; name = name)
+    return SerialSubscriber(sp; name=name)
 end
 
 
@@ -60,12 +65,6 @@ end
 forceclose(sub::SerialSubscriber) = close(sub)
 
 
-"""
-    Base.readuntil(ard::Arduino, delim::UInt8)
-Reads byte by byte from arduinos serial port stream and copies into
-read buffer until 0x00 flag bit is encountered. Returns view into
-read buffer if found complete message and nothing otherwise.
-"""
 function Base.readuntil(sub::SerialSubscriber, delim::UInt8)
     if isopen(sub) && (bytesavailable(sub.serial_port) > 0)
         for i = 1:length(sub.read_buffer)
@@ -82,50 +81,82 @@ function Base.readuntil(sub::SerialSubscriber, delim::UInt8)
     return @view UInt8[][:]
 end
 
+
 """
-    decode_packet(msg)
-Uses [COBS](https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing)
-to decode message block.
+    read_packet(sub::SerialSubscriber)
 """
-function decode_packet(sub::SerialSubscriber, msg::AbstractVector{UInt8})
-    incoming_msg_size = length(msg)
-    incoming_msg_size == 0 && error("Empty message passed to encode!")
-    incoming_msg_size > MSG_BLOCK_SIZE &&
-        error("Can only safely encode 256 bytes at a time")
+function read_packet(sub::SerialSubscriber, delim::UInt8)
+    if isopen(sub) && (bytesavailable(sub.serial_port) > 0)
+        header_window = reinterpret(UInt8, [sub.header_flag])
+        footer_window = reinterpret(UInt8, [sub.footer_flag])
 
-    if !any(msg .== 0x00)
-        return nothing
-    end
+        window = zeros()
 
-    push_ind, pop_ind = 1, 1
-    n = msg[pop_ind]
-    pop_ind += 1
-
-    c = 0
-    b = msg[pop_ind]
-    pop_ind += 1
-
-    # While we haven't encountered flag byte and haven't read more than the
-    # maximum message size
-    while b ≠ 0x00 && push_ind <= MSG_BLOCK_SIZE && pop_ind <= incoming_msg_size
-        c += 1
-        if c < n
-            sub.msg_in_buffer[push_ind] = b
-        else
-            sub.msg_in_buffer[push_ind] = 0x00
-
-            n = b
-            c = 0
+        while(bytesavailable(sub.serial_port))
+            read(sub.serial_port, UInt8)
         end
 
-        b = msg[pop_ind]
-        pop_ind += 1
-        push_ind += 1
+        for i = 1:length(sub.read_buffer)
+            # Read one byte from LibSerialPort.SerialPort buffer into publishers
+            # local buffer one byte at a time until delim byte encoutered then return
+            sub.read_buffer[i] = read(sub.serial_port, UInt8)
+            if sub.read_buffer[i] == delim #0x00
+                return @view sub.read_buffer[max(1, i + 1 - MSG_BLOCK_SIZE):i]
+            end
+        end
+    end
+    # return nothing
+    # If serial port isn't open or flag byte isn't encountered in buffer return nothing
+    return @view UInt8[][:]
+end
+
+function Base.occursin(needle::AbstractVector{UInt8}, haystack::AbstractVector{UInt8})
+    ned_len = length(needle)
+    hay_len = length(haystack)
+    ned_len <= hay_len || throw(MercuryException("needle must be shorter or of equal length to haystack"))
+
+    n = hay_len - ned_len + 1
+    for i in 1:n
+        if all(needle .== haystack[i:i+ned_len-1])
+            return true
+        end
+    end
+    return false
+end
+
+function is_valid_packet(msg::AbstractVector{UInt8})
+    temp = msg[2:end-1]
+
+    head_foot = (msg[1] == msg[end] == END)
+    contains_end = (END in temp)
+    constains_esc_esc_end= occursin(SA[ESC, ESC_END], temp)
+    constains_esc_esc_end= occursin(SA[ESC, ESC_END], temp)
+
+
+    return !((END in temp) || (temp[end] == ESC) ||
+             (((ESC + ESC_END) in temp) || ((ESC + ESC_ESC) in temp)))
+end
+
+
+"""
+    decodeSLIP(msg)
+Uses [SLIP](https://en.wikipedia.org/wiki/Serial_Line_Internet_Protocol)
+to decode message block.
+"""
+function decodeSLIP(sub::SerialSubscriber, msg::AbstractVector{UInt8})
+    is_valid_packet(msg) || throw(MercuryException("Trying to decode non-valid SLIP packet!"))
+
+    n = length(msg)
+    sub.msg_in_length = n - 2
+
+    for i in 1:n-2
+        sub.msg_in_buffer[i] = msg[i+1]
     end
 
-    sub.msg_in_length = push_ind - 1
+    replace!(sub.msg_in_buffer, (ESC + ESC_END)=>END)
+    replace!(sub.msg_in_buffer, (ESC + ESC_ESC)=>ESC)
 
-    return view(sub.msg_in_buffer, 1:sub.msg_in_length)
+    return @view sub.msg_in_buffer[1:n-2]
 end
 
 """

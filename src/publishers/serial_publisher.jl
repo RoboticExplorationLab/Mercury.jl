@@ -1,4 +1,9 @@
 const MSG_BLOCK_SIZE = 256
+# SLIP encodings
+const END = 0xC0
+const ESC = 0xDB
+const ESC_END = 0xDC
+const ESC_ESC = 0xDD
 
 """
     SerialPublisher
@@ -70,33 +75,23 @@ function Base.open(pub::SerialPublisher)
 end
 
 """
-    encode(pub::SerialPublisher, payload::AbstractVector{UInt8})
-Zero Allocation COBS encoding of a message block
+    encodeSLIP(pub::SerialPublisher, payload::AbstractVector{UInt8})
+Zero Allocation SLIP encoding of a message block
 """
-function encodeCOBS(pub::SerialPublisher, payload::AbstractVector{UInt8})
+function encodeSLIP(pub::SerialPublisher, payload::AbstractVector{UInt8})
     n = length(payload)
     pub.msg_out_length = n + 2
 
-    ind = 0x01
-    acc = 0x01
-    for x in Iterators.reverse(payload)
-        if iszero(x)
-            pub.msg_out_buffer[ind] = acc
-            acc = 0x00
-        else
-            pub.msg_out_buffer[ind] = x
-        end
-        ind += 0x01
-        acc += 0x01
+    pub.msg_out_buffer[1] = END
+    for i in 1:n
+        pub.msg_out_buffer[i+1] = payload[i]
     end
-    pub.msg_out_buffer[pub.msg_out_length-1] = acc
+    pub.msg_out_buffer[n+2] = END
 
-    # Reverse the msg_buffer
-    reverse!(pub.msg_out_buffer, 1, pub.msg_out_length - 1)
-    # Add on end flag to message
-    pub.msg_out_buffer[pub.msg_out_length] = 0x00
-    # Return a view into the msg buffer of just critical part of the buffer
-    return view(pub.msg_out_buffer, 1:pub.msg_out_length)
+    replace!(pub.msg_out_buffer[2:n+1], ESC=>(ESC + ESC_ESC))
+    replace!(pub.msg_out_buffer[2:n+1], END=>(ESC + ESC_END))
+
+    return @view pub.msg_out_buffer[1:n+2]
 end
 
 function encode!(pub::SerialPublisher, payload::ProtoBuf.ProtoType)
@@ -107,6 +102,7 @@ function encode!(pub::SerialPublisher, payload::ProtoBuf.ProtoType)
 end
 
 function encode!(pub::SerialPublisher, payload::AbstractVector{UInt8})
+    length(payload) <= length(pub.msg_out_buffer)-2 || throw(MercuryException("Can only send messages of size $(MSG_BLOCK_SIZE-2)"))
     for i = 1:length(payload)
         pub.msg_out_buffer[i] = payload[i]
     end
