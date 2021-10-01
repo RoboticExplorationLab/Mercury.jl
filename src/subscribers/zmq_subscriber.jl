@@ -44,6 +44,7 @@ struct ZmqSubscriber <: Subscriber
         ctx::ZMQ.Context,
         ipaddr::Sockets.IPv4,
         port::Integer;
+        timeout_ms::Integer = 1000,
         name = gensubscribername(),
     )
         local socket
@@ -67,6 +68,7 @@ struct ZmqSubscriber <: Subscriber
         @info "Subscribing $name to: tcp://$ipaddr:$port"
         @show isopen(socket)
         should_finish = Threads.Atomic{Bool}(false)
+        ZMQ._set_rcvtimeo(socket, timeout_ms)
         new(
             socket,
             port,
@@ -96,8 +98,8 @@ function ZmqSubscriber(
     ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
 
-function Subscriber(sub::ZmqSubscriber)
-    return sub
+function settimeout!(sub::ZmqSubscriber, timeout_ms::Integer)
+    ZMQ._set_rcvtimeo(socket, timeout_ms)
 end
 
 Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
@@ -120,13 +122,15 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     local bin_data
     lock(sub.socket_lock) do
         if isopen(sub)  # must take lock before checking if the socket is open
-            # bin_data = ZMQ.Message()
-            # bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
-            bin_data = ZMQ.recv(sub.socket)
-
-            # Once blocking is finished we know we've recieved a new message
-            sub.flags.hasreceived = true
-            did_receive = true
+            bin_data = ZMQ.Message()
+            bytes_read = ZMQ.msg_recv(sub.socket, bin_data, 0)
+            if bytes_read == -1
+                ZMQ.zmq_errno() == ZMQ.EAGAIN || throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
+            else
+                sub.flags.hasreceived = true
+                did_receive = true
+            end
+            # bin_data = ZMQ.recv(sub.socket)
 
             # Forces subscriber to conflate messages
             ZMQ.getproperty(sub.socket, :events)
