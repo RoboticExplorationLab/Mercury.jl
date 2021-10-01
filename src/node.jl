@@ -110,7 +110,11 @@ In `compute`:
     # use node.local_test_msg in the rest of the code
     ...
 """
-function add_subscriber!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, sub::Subscriber)
+function add_subscriber!(
+    nodeio::NodeIO,
+    msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}},
+    sub::Subscriber
+    )
     push!(nodeio.subs, SubscribedMessage(msg, sub))
 end
 

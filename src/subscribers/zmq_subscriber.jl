@@ -120,10 +120,7 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     local bin_data
     lock(sub.socket_lock) do
         if isopen(sub)  # must take lock before checking if the socket is open
-            # bin_data = ZMQ.Message()
-            # bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
             bin_data = ZMQ.recv(sub.socket)
-
             # Once blocking is finished we know we've recieved a new message
             sub.flags.hasreceived = true
             did_receive = true
@@ -134,12 +131,9 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     end
     sub.flags.isreceiving = false
 
-    # Why not just call IOBuffer(bin_data)?
-    # io = seek(convert(IOStream, bin_data), 0)
     if did_receive
         lock(write_lock) do
-            decode!(buf, bin_data)
-            # ProtoBuf.readproto(io, proto_msg)
+            sub.flags.bytesrecieved = decode!(buf, bin_data)
         end
     end
 end
