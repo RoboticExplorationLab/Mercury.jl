@@ -51,7 +51,6 @@ function SerialSubscriber(port_name::String, baudrate::Int64; name = gensubscrib
     return SerialSubscriber(sp; name = name)
 end
 
-
 Base.isopen(sub::SerialSubscriber) = LibSerialPort.isopen(sub.serial_port)
 function Base.close(sub::SerialSubscriber)
     @info "Closing SerialSubscriber: $(getname(sub))"
@@ -83,11 +82,11 @@ function Base.readuntil(sub::SerialSubscriber, delim::UInt8)
 end
 
 """
-    decode_packet(msg)
+    decodeCOBS(msg)
 Uses [COBS](https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing)
 to decode message block.
 """
-function decode_packet(sub::SerialSubscriber, msg::AbstractVector{UInt8})
+function decodeCOBS(sub::SerialSubscriber, msg::AbstractVector{UInt8})
     incoming_msg_size = length(msg)
     incoming_msg_size == 0 && error("Empty message passed to encode!")
     incoming_msg_size > MSG_BLOCK_SIZE &&
@@ -142,7 +141,8 @@ function receive(
         sub.flags.isreceiving = false
 
         if !isempty(encoded_msg)
-            bin_data = decode_packet(sub, encoded_msg)
+            # @info "Heard something!"
+            bin_data = decodeCOBS(sub, encoded_msg)
 
             lock(write_lock) do
                 sub.flags.bytesrecieved = decode!(buf, bin_data)
