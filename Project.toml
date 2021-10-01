@@ -12,5 +12,6 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 ZMQ = "c2297ded-f4af-51ae-bb23-16f91089e4e1"
 
 [compat]
+LibSerialPort = "0.5"
 ProtoBuf = "0.11"
 ZMQ = "1"
