@@ -68,9 +68,33 @@ end
 function subscribe(
     sub::Subscriber,
     buf,
-    write_lock::ReentrantLock = ReentrantLock(),
-)::Nothing
-    error("The `subscribe` method hasn't been implemented for your Subscriber yet!")
+    write_lock::ReentrantLock,
+)
+    @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(portstring(sub))"
+
+    try
+        while isopen(sub)
+            receive(sub, buf, write_lock)
+            GC.gc(false)
+            yield()
+            if getflags(sub).should_finish[]
+                break
+            end
+        end
+        close(sub)
+        @warn "Shutting Down subscriber $(getname(sub)): $(portstring(sub)). Serial Port was closed."
+    catch err
+        sub.flags.diderror = true
+        close(sub)
+        @show typeof(err)
+        if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket errored out."
+            rethrow(err)
+        else
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket was forcefully closed."
+        end
+    end
+    return nothing
 end
 
 """
