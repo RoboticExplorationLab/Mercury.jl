@@ -37,7 +37,7 @@ end
 """
     SerialPublisher(port_name::String, baudrate::Integer; [name])
 
-Create a publisher attached to the serial port at `port_name` with a communicate rate of 
+Create a publisher attached to the serial port at `port_name` with a communicate rate of
 `baudrate`. Automatically tries to open the port.
 """
 function SerialPublisher(port_name::String, baudrate::Integer; name = genpublishername())

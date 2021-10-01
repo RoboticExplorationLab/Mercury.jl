@@ -9,7 +9,7 @@ getname(pub::Publisher)::String = pub.name
 function publish(pub::Publisher, proto_msg::ProtoBuf.ProtoType)::Nothing
     throw(
         MercuryException(
-            "The `receive` method hasn't been implemented for your Publisher yet!",
+            "The `publish` method hasn't been implemented for your Publisher yet!",
         ),
     )
 end
