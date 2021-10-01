@@ -1,4 +1,9 @@
 const MSG_BLOCK_SIZE = 256
+# SLIP encodings
+const END = 0xC0
+const ESC = 0xDB
+const ESC_END = 0xDC
+const ESC_ESC = 0xDD
 
 """
     SerialPublisher
@@ -107,6 +112,7 @@ function encode!(pub::SerialPublisher, payload::ProtoBuf.ProtoType)
 end
 
 function encode!(pub::SerialPublisher, payload::AbstractVector{UInt8})
+    length(payload) <= length(pub.msg_out_buffer)-2 || throw(MercuryException("Can only send messages of size $(MSG_BLOCK_SIZE-2)"))
     for i = 1:length(payload)
         pub.msg_out_buffer[i] = payload[i]
     end

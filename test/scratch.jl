@@ -67,5 +67,31 @@ close(sock)
 
 
 # %%
-println("hello")
+function Base.occursin(needle::AbstractVector{UInt8}, haystack::AbstractVector{UInt8})
+    ned_len = length(needle)
+    hay_len = length(haystack)
+    ned_len <= hay_len || throw(MercuryException("needle must be shorter or of equal length to haystack"))
+
+    n = hay_len - ned_len + 1
+    for i in 1:n
+        if all(needle .== haystack[i:i+ned_len-1])
+            return true
+        end
+    end
+    return false
+end
+
 # %%
+test1 = rand(UInt8, 16)
+test2 = test1[5:9]
+occursin(test2, test1)
+
+# %%
+test1 = rand(UInt8, 16)
+test2 = test1[12:16]
+occursin(test2, test1)
+
+# %%
+test1 = rand(UInt8, 16)
+test2 = rand(UInt8, 17)
+occursin(test2, test1)

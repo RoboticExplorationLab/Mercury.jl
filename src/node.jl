@@ -161,6 +161,7 @@ setupIO!(::Node, ::NodeIO) =
 
 # These methods can be overwritten as needed
 startup(::Node)::Nothing = nothing
+finishup(::Node)::Nothing = nothing
 getcontext(node::Node)::Union{Nothing,ZMQ.Context} = getIO(node).ctx
 getrate(node::Node)::Float64 = node.rate
 getIO(node::Node)::NodeIO = node.nodeio

@@ -1,14 +1,15 @@
-const MSG_BLOCK_SIZE = 256
 const SERIAL_PORT_BUFFER_SIZE = 1024
+const MSG_BLOCK_SIZE = 256
 
 mutable struct SerialSubscriber <: Subscriber
     serial_port::LibSerialPort.SerialPort
     name::String
+
     read_buffer::StaticArrays.MVector{SERIAL_PORT_BUFFER_SIZE,UInt8}
     msg_in_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
     msg_in_length::Int64
+
     flags::SubscriberFlags
-    should_finish::Threads.Atomic{Bool}
 
     function SerialSubscriber(
         serial_port::LibSerialPort.SerialPort;
@@ -21,12 +22,10 @@ mutable struct SerialSubscriber <: Subscriber
 
         # Buffer for dumping read bytes into
         read_buffer = StaticArrays.@MVector zeros(UInt8, SERIAL_PORT_BUFFER_SIZE)
-
-        # Vector written to when encoding Protobuf using COBS protocol
         msg_in_buffer = StaticArrays.@MVector zeros(UInt8, MSG_BLOCK_SIZE)
         msg_in_length = 0
 
-        @info "Subscribing $name on serial port"
+        @info "Subscribing $name on serial port: `$(LibSerialPort.Lib.sp_get_port_name(serial_port.ref))`"
         new(
             serial_port,
             name,
@@ -38,7 +37,12 @@ mutable struct SerialSubscriber <: Subscriber
     end
 end
 
-function SerialSubscriber(port_name::String, baudrate::Int64; name = gensubscribername())
+function SerialSubscriber(
+    port_name::String,
+    baudrate::Int64;
+    name = gensubscribername()
+    )
+
     local sp
     @catchserial(
         begin
@@ -47,8 +51,7 @@ function SerialSubscriber(port_name::String, baudrate::Int64; name = gensubscrib
         end,
         "Failed to connect to serial port at: `$port_name`"
     )
-
-    return SerialSubscriber(sp; name = name)
+    return SerialSubscriber(sp; name=name)
 end
 
 Base.isopen(sub::SerialSubscriber) = LibSerialPort.isopen(sub.serial_port)
@@ -58,20 +61,21 @@ function Base.close(sub::SerialSubscriber)
 end
 forceclose(sub::SerialSubscriber) = close(sub)
 
-
-"""
-    Base.readuntil(ard::Arduino, delim::UInt8)
-Reads byte by byte from arduinos serial port stream and copies into
-read buffer until 0x00 flag bit is encountered. Returns view into
-read buffer if found complete message and nothing otherwise.
-"""
-function Base.readuntil(sub::SerialSubscriber, delim::UInt8)
+function read_packet(sub::SerialSubscriber)
+    delim = 0x00
     if isopen(sub) && (bytesavailable(sub.serial_port) > 0)
+        while (bytesavailable(sub.serial_port) > 0)
+            if read(sub.serial_port, UInt8) == delim
+                break
+                # Encountered end of previous packet
+            end
+        end
+
         for i = 1:length(sub.read_buffer)
             # Read one byte from LibSerialPort.SerialPort buffer into publishers
             # local buffer one byte at a time until delim byte encoutered then return
             sub.read_buffer[i] = read(sub.serial_port, UInt8)
-            if sub.read_buffer[i] == delim #0x00
+            if sub.read_buffer[i] == delim
                 return @view sub.read_buffer[max(1, i + 1 - MSG_BLOCK_SIZE):i]
             end
         end
@@ -137,11 +141,10 @@ function receive(
 )
     if isopen(sub)
         sub.flags.isreceiving = true
-        encoded_msg = readuntil(sub, 0x00)
+        encoded_msg = read_packet(sub)
         sub.flags.isreceiving = false
 
         if !isempty(encoded_msg)
-            # @info "Heard something!"
             bin_data = decodeCOBS(sub, encoded_msg)
 
             lock(write_lock) do
