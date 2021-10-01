@@ -75,23 +75,33 @@ function Base.open(pub::SerialPublisher)
 end
 
 """
-    encodeSLIP(pub::SerialPublisher, payload::AbstractVector{UInt8})
-Zero Allocation SLIP encoding of a message block
+    encode(pub::SerialPublisher, payload::AbstractVector{UInt8})
+Zero Allocation COBS encoding of a message block
 """
-function encodeSLIP(pub::SerialPublisher, payload::AbstractVector{UInt8})
+function encodeCOBS(pub::SerialPublisher, payload::AbstractVector{UInt8})
     n = length(payload)
     pub.msg_out_length = n + 2
 
-    pub.msg_out_buffer[1] = END
-    for i in 1:n
-        pub.msg_out_buffer[i+1] = payload[i]
+    ind = 0x01
+    acc = 0x01
+    for x in Iterators.reverse(payload)
+        if iszero(x)
+            pub.msg_out_buffer[ind] = acc
+            acc = 0x00
+        else
+            pub.msg_out_buffer[ind] = x
+        end
+        ind += 0x01
+        acc += 0x01
     end
-    pub.msg_out_buffer[n+2] = END
+    pub.msg_out_buffer[pub.msg_out_length-1] = acc
 
-    replace!(pub.msg_out_buffer[2:n+1], ESC=>(ESC + ESC_ESC))
-    replace!(pub.msg_out_buffer[2:n+1], END=>(ESC + ESC_END))
-
-    return @view pub.msg_out_buffer[1:n+2]
+    # Reverse the msg_buffer
+    reverse!(pub.msg_out_buffer, 1, pub.msg_out_length - 1)
+    # Add on end flag to message
+    pub.msg_out_buffer[pub.msg_out_length] = 0x00
+    # Return a view into the msg buffer of just critical part of the buffer
+    return view(pub.msg_out_buffer, 1:pub.msg_out_length)
 end
 
 function encode!(pub::SerialPublisher, payload::ProtoBuf.ProtoType)
