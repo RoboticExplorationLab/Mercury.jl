@@ -4,6 +4,8 @@ using Sockets
 using ZMQ
 using BenchmarkTools
 using Test
+using Logging
+Logging.disable_logging(Logging.Info)
 
 # Generate ProtoBuf julia files
 outdir = joinpath(@__DIR__, "jlout")

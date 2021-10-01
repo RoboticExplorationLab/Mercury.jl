@@ -65,7 +65,6 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        @show isopen(socket)
         should_finish = Threads.Atomic{Bool}(false)
         new(
             socket,
@@ -96,10 +95,7 @@ function ZmqSubscriber(
     ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
 
-function Subscriber(sub::ZmqSubscriber)
-    return sub
-end
-
+getcomtype(::ZmqSubscriber) = :zmq
 Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
 
 function Base.close(sub::ZmqSubscriber, timeout = 1)
@@ -161,7 +157,6 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
     catch err
         sub.flags.diderror = true
         close(sub)
-        @show typeof(err)
         if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
             @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket errored out."
             rethrow(err)
