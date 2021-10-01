@@ -16,6 +16,9 @@ Base.@kwdef mutable struct SubscriberFlags
 
     "# Of bytes of last message recieved"
     bytesrecieved::Int64 = 0
+
+    "Tells the subscriber thread to shut down the task ASAP"
+    should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
 end
 
 abstract type Subscriber end
@@ -29,6 +32,7 @@ forceclose(sub::Subscriber)::Nothing =
 # Base.can_close(sub::Subscriber)::Nothing = error("The `can_close` method hasn't been implemented for your Subscriber yet!")
 getname(sub::Subscriber)::String = sub.name
 getflags(sub::Subscriber)::SubscriberFlags = sub.flags
+portstring(sub::Subscriber)::String = ""
 
 # Keep track of newly recieved message
 bytesreceived(sub::Subscriber)::Int64 = getflags(sub).bytesrecieved

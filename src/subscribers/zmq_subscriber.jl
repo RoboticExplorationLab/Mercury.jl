@@ -38,7 +38,6 @@ struct ZmqSubscriber <: Subscriber
     name::String
     socket_lock::ReentrantLock
     flags::SubscriberFlags
-    should_finish::Threads.Atomic{Bool}
 
     function ZmqSubscriber(
         ctx::ZMQ.Context,
@@ -61,12 +60,11 @@ struct ZmqSubscriber <: Subscriber
         )
         @catchzmq(
             ZMQ.connect(socket, "tcp://$ipaddr:$port"),
-            "Could not connect subscriber $name to port $(tcpstring(ipaddr, port))."
+            "Could not connect subscriber $name to port $(portstring(ipaddr, port))."
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
         @show isopen(socket)
-        should_finish = Threads.Atomic{Bool}(false)
         new(
             socket,
             port,
@@ -75,7 +73,6 @@ struct ZmqSubscriber <: Subscriber
             name,
             ReentrantLock(),
             SubscriberFlags(),
-            should_finish,
         )
     end
 end
@@ -139,35 +136,36 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
 end
 
 function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
-    @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(tcpstring(sub))"
+    @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(portstring(sub))"
 
     try
         while isopen(sub)
             receive(sub, buf, write_lock)
             GC.gc(false)
             yield()
-            if sub.should_finish[]
+            if getflags(sub).should_finish[]
                 break
             end
         end
         close(sub)
-        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
+        @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket was closed."
     catch err
         sub.flags.diderror = true
         close(sub)
         @show typeof(err)
         if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
-            @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket errored out."
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket errored out."
             rethrow(err)
         else
-            @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was forcefully closed."
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket was forcefully closed."
         end
     end
 
     return nothing
 end
 
-tcpstring(sub::ZmqSubscriber) = tcpstring(sub.ipaddr, sub.port)
+
+portstring(sub::ZmqSubscriber) = tcpstring(sub.ipaddr, sub.port)
 
 """
     publish_until_receive(pub, sub, msg_out; [timeout])

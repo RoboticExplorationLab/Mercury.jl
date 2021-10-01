@@ -3,15 +3,12 @@ const SERIAL_PORT_BUFFER_SIZE = 1024
 
 mutable struct SerialSubscriber <: Subscriber
     serial_port::LibSerialPort.SerialPort
-
     name::String
-
     read_buffer::StaticArrays.MVector{SERIAL_PORT_BUFFER_SIZE,UInt8}
-
     msg_in_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
     msg_in_length::Int64
-
     flags::SubscriberFlags
+    should_finish::Threads.Atomic{Bool}
 
     function SerialSubscriber(
         serial_port::LibSerialPort.SerialPort;
@@ -176,16 +173,23 @@ function subscribe(
             receive(sub, buf, write_lock)
             GC.gc(false)
             yield()
+            if getflags(sub).should_finish[]
+                break
+            end
         end
         close(sub)
-        @info "Shutting Down subscriber $(getname(sub)): $(portstring(sub)). Serial Port was closed."
+        @warn "Shutting Down subscriber $(getname(sub)): $(portstring(sub)). Serial Port was closed."
     catch err
         sub.flags.diderror = true
         close(sub)
-        @warn "Shutting Down $(typeof(buf)) subscriber: $(portstring(sub))"
-        @error err exception = (err, catch_backtrace())
+        @show typeof(err)
+        if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket errored out."
+            rethrow(err)
+        else
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket was forcefully closed."
+        end
     end
-
     return nothing
 end
 
