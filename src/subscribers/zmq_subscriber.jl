@@ -64,7 +64,7 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        @show isopen(socket)
+        should_finish = Threads.Atomic{Bool}(false)
         new(
             socket,
             port,
@@ -93,10 +93,7 @@ function ZmqSubscriber(
     ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
 
-function Subscriber(sub::ZmqSubscriber)
-    return sub
-end
-
+getcomtype(::ZmqSubscriber) = :zmq
 Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
 
 function Base.close(sub::ZmqSubscriber, timeout = 1)

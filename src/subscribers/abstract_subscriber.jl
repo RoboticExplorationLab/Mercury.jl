@@ -107,17 +107,35 @@ struct SubscribedMessage
     sub::Subscriber          # Note this is an abstract type
     lock::ReentrantLock
     name::String
+    task::Vector{Task}
 
     function SubscribedMessage(
         msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}},
         sub::Subscriber;
         name = getname(sub),
     )
-        new(msg, sub, ReentrantLock(), name)
+        new(msg, sub, ReentrantLock(), name, Task[])
     end
 end
-subscribe(submsg::SubscribedMessage) = subscribe(submsg.sub, submsg.msg, submsg.lock)
-getname(submsg::SubscribedMessage) = submsg.name
+@inline subscribe(submsg::SubscribedMessage) = subscribe(submsg.sub, submsg.msg, submsg.lock)
+@inline getname(submsg::SubscribedMessage) = submsg.name
+@inline getcomtype(submsg::SubscribedMessage) = getcomtype(submsg.sub)
+isrunning(submsg::SubscribedMessage) = !isempty(submsg.task) && !istaskdone(submsg.task[end])
+
+function launchtask(submsg::SubscribedMessage)
+    push!(submsg.task, @async subscribe(submsg))
+    return submsg.task[end]
+end
+
+function printstatus(sub::SubscribedMessage; indent=0)
+    prefix = " " ^ indent
+    println(prefix, "Subscriber: ", getname(sub))
+    println(prefix, "  Type: ", getcomtype(sub))
+    println(prefix, "  Message Type: ", typeof(sub.msg))
+    println(prefix, "  Is running? ", !isempty(sub.task) && !istaskdone(sub.task[end]))
+    println(prefix, "  Is failed? ", !isempty(sub.task) && istaskfailed(sub.task[end]))
+    println(prefix, "  Has received? ", getflags(sub.sub).hasreceived)
+end
 
 """
     on_new(func::Function, submsg::SubscribedMessage)
