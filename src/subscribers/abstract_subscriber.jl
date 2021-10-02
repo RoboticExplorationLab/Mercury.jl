@@ -34,6 +34,7 @@ function got_new!(sub::Subscriber)
 end
 
 function decode!(buf::ProtoBuf.ProtoType, bin_data)
+    # io = IOBuffer(bin_data)
     io = seek(convert(IOStream, bin_data), 0)
     ProtoBuf.readproto(io, buf)
 end

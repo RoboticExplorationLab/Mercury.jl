@@ -321,7 +321,7 @@ function closeall(node::Node)
     nodeio = getIO(node)
     # Close publishers and subscribers
     for submsg in nodeio.subs
-        forceclose(submsg.sub)
+        close(submsg.sub)
     end
     for pubmsg in nodeio.pubs
         close(pubmsg.pub)

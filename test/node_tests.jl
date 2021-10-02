@@ -121,7 +121,16 @@ subtask = Threads.@spawn Hg.launch(subnode)
 @test !istaskfailed(subtask)
 @test Hg.node_sockets_are_open(subnode)
 
+
+
 ##
+sub = Hg.getsubscriber(subnode, 1)
+sock = sub.sub.socket
+msg = ZMQ.Message()
+Hg.settimeout!(sub.sub, -1)
+@time ZMQ.msg_recv(sock, msg, 0)
+Hg.settimeout!(sub.sub, 2000)
+
 sleep(1)
 @test Hg.isrunning(Hg.getsubscriber(subnode, 1))
 Hg.stopnode(subnode)
