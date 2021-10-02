@@ -37,8 +37,8 @@ end
 
 # TODO: add a `close` method and modify the constructor to automatically create a subscriber
 
-function printstatus(pub::PublishedMessage; indent=0)
-    prefix = " " ^ indent
+function printstatus(pub::PublishedMessage; indent = 0)
+    prefix = " "^indent
     println(prefix, "Publisher: ", getname(pub))
     println(prefix, "  Type: ", getcomtype(pub))
     println(prefix, "  Message Type: ", typeof(pub.msg))

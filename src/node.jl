@@ -4,7 +4,7 @@ Base.@kwdef mutable struct NodeOptions
 end
 
 Base.@kwdef mutable struct NodeFlags
-    did_error::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false) 
+    did_error::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
     is_running::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
     should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
 end
@@ -27,7 +27,7 @@ struct NodeIO
     opts::NodeOptions
     flags::NodeFlags
 
-    function NodeIO(ctx::ZMQ.Context=ZMQ.context(); opts...)
+    function NodeIO(ctx::ZMQ.Context = ZMQ.context(); opts...)
         new(ctx, PublishedMessage[], SubscribedMessage[], NodeOptions(opts...), NodeFlags())
     end
 end
@@ -183,15 +183,15 @@ end
 ##############################
 getoptions(node::Node) = getIO(node).opts
 getflags(node::Node) = getIO(node).flags
-getrate(node::Node)::Float64 = getoptions(node).rate 
+getrate(node::Node)::Float64 = getoptions(node).rate
 function isnodedone(node::Node)::Bool
     nodeio = getIO(node)
     all_running = all(isrunning.(nodeio.subs))
     return getflags(node).should_finish[] || !all_running
 end
-function stopnode(node::Node; timeout=1.0)
+function stopnode(node::Node; timeout = 1.0)
     getflags(node).should_finish[] = true
-    t_start = time() 
+    t_start = time()
     while (time() - t_start < timeout)
         yield()
         if !(getflags(node).is_running[])
@@ -208,7 +208,8 @@ publishers(node::Node) = getIO(node).pubs
 subscribers(node::Node) = getIO(node).subs
 
 for pubsub in ((:publisher, :pubs), (:subscriber, :subs))
-    @eval $(Symbol("get", pubsub[1]))(node::Node, index::Integer) = getIO(node).$(pubsub[2])[index]
+    @eval $(Symbol("get", pubsub[1]))(node::Node, index::Integer) =
+        getIO(node).$(pubsub[2])[index]
     @eval function $(Symbol("get", pubsub[1]))(node::Node, name::String)
         index = findfirst(getIO(node).$(pubsub[2])) do msg
             getname(msg) == name
@@ -301,7 +302,7 @@ function launch(node::Node)
         end
         closeall(node)
     end
-    getflags(node).is_running[] = false 
+    getflags(node).is_running[] = false
 end
 
 function start_subscribers(node::Node)
@@ -339,6 +340,7 @@ function node_sockets_are_open(node::Node)
     )
 end
 
+#! format: off
 function printstatus(node::Node)
     is_running = getflags(node).is_running[]
     printstyled("Node name: ", bold=true); println(getname(node))
@@ -359,3 +361,4 @@ function printstatus(node::Node)
         end
     end
 end
+#! format: on

@@ -78,10 +78,12 @@ struct SubscribedMessage
         new(msg, sub, ReentrantLock(), name, Task[])
     end
 end
-@inline subscribe(submsg::SubscribedMessage) = subscribe(submsg.sub, submsg.msg, submsg.lock)
+@inline subscribe(submsg::SubscribedMessage) =
+    subscribe(submsg.sub, submsg.msg, submsg.lock)
 @inline getname(submsg::SubscribedMessage) = submsg.name
 @inline getcomtype(submsg::SubscribedMessage) = getcomtype(submsg.sub)
-isrunning(submsg::SubscribedMessage) = !isempty(submsg.task) && !istaskdone(submsg.task[end])
+isrunning(submsg::SubscribedMessage) =
+    !isempty(submsg.task) && !istaskdone(submsg.task[end])
 
 # TODO: add a `close` method and modify the constructor to automatically create a subscriber
 
@@ -96,8 +98,8 @@ function stopsubscriber(submsg::SubscribedMessage)
     wait(submsg.task[end])
 end
 
-function printstatus(sub::SubscribedMessage; indent=0)
-    prefix = " " ^ indent
+function printstatus(sub::SubscribedMessage; indent = 0)
+    prefix = " "^indent
     println(prefix, "Subscriber: ", getname(sub))
     println(prefix, "  Type: ", getcomtype(sub))
     println(prefix, "  Message Type: ", typeof(sub.msg))

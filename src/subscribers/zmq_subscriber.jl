@@ -64,15 +64,7 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        new(
-            socket,
-            port,
-            ipaddr,
-            IOBuffer(),
-            name,
-            ReentrantLock(),
-            SubscriberFlags(),
-        )
+        new(socket, port, ipaddr, IOBuffer(), name, ReentrantLock(), SubscriberFlags())
     end
 end
 
