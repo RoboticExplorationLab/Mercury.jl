@@ -60,7 +60,6 @@ function Hg.setupIO!(node::SubNode, nodeio::Hg.NodeIO)
     port = 5555
     sub = Hg.ZmqSubscriber(ctx, addr, port)
     empty!(nodeio.subs)
-    empty!(nodeio.sub_tasks)
     Hg.add_subscriber!(nodeio, node.test_msg, sub)
 end
 
@@ -130,6 +129,8 @@ Hg.stopnode(node)
 @test !Hg.getflags(node).is_running[]
 @test !Hg.getflags(subnode).is_running[]
 
+@test !Hg.getflags(node).did_error[]
+@test !Hg.getflags(subnode).did_error[]
 Hg.printstatus(node)
 Hg.printstatus(subnode)
 
@@ -138,7 +139,9 @@ pub = Hg.getpublisher(node, 1)
 @test !isopen(pub.pub)
 sub = Hg.getsubscriber(subnode, 1) 
 @test !isopen(sub.sub)
-@test isempty(subnode.nodeio.sub_tasks)
+for submsg in subnode.nodeio.subs
+    @test isempty(submsg.task)
+end
 
 dx = node.test_msg.x - subnode.test_msg.x
 dy = node.test_msg.y - subnode.test_msg.y

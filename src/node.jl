@@ -4,7 +4,7 @@ Base.@kwdef mutable struct NodeOptions
 end
 
 Base.@kwdef mutable struct NodeFlags
-    did_error::Bool = false
+    did_error::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false) 
     is_running::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
     should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
 end
@@ -24,12 +24,11 @@ struct NodeIO
     # sp::Union{Nothing,LibSerialPort.SerialPort}
     pubs::Vector{PublishedMessage}
     subs::Vector{SubscribedMessage}
-    sub_tasks::Vector{Task}
     opts::NodeOptions
     flags::NodeFlags
 
     function NodeIO(ctx::ZMQ.Context=ZMQ.context(); opts...)
-        new(ctx, PublishedMessage[], SubscribedMessage[], Task[], NodeOptions(opts...), NodeFlags())
+        new(ctx, PublishedMessage[], SubscribedMessage[], NodeOptions(opts...), NodeFlags())
     end
 end
 
@@ -187,8 +186,8 @@ getflags(node::Node) = getIO(node).flags
 getrate(node::Node)::Float64 = getoptions(node).rate 
 function isnodedone(node::Node)::Bool
     nodeio = getIO(node)
-    finished_sub = any(istaskdone.(nodeio.sub_tasks))
-    return getflags(node).should_finish[] || finished_sub
+    all_running = all(isrunning.(nodeio.subs))
+    return getflags(node).should_finish[] || !all_running
 end
 function stopnode(node::Node; timeout=1.0)
     getflags(node).should_finish[] = true
@@ -297,7 +296,7 @@ function launch(node::Node)
             # Close everything
         else
             @warn "Closing node $(getname(node)). Closed with error."
-            getflags(node).did_error = true
+            getflags(node).did_error[] = true
             rethrow(err)
         end
         closeall(node)
@@ -309,9 +308,7 @@ function start_subscribers(node::Node)
     nodeio = getIO(node)
 
     for submsg in nodeio.subs
-        sub_task = launchtask(submsg)
-        # sub_task = @async subscribe(submsg)
-        push!(nodeio.sub_tasks, sub_task)
+        launchtask(submsg)
     end
 end
 
@@ -327,10 +324,10 @@ function closeall(node::Node)
         close(pubmsg.pub)
     end
     # Wait for async tasks to finish
-    for subtask in nodeio.sub_tasks
-        wait(subtask)
+    for submsg in nodeio.subs
+        wait(submsg.task[end])
+        pop!(submsg.task)
     end
-    empty!(nodeio.sub_tasks)
 
     return nothing
 end
@@ -347,7 +344,7 @@ function printstatus(node::Node)
     printstyled("Node name: ", bold=true); println(getname(node))
     printstyled("  Is running? ", bold=true); println(is_running)
     if !is_running
-        printstyled("  Did error? ", bold=true); println(getflags(node).did_error)
+        printstyled("  Did error? ", bold=true); println(getflags(node).did_error[])
     end
     if (numpublishers(node) > 0)
         printstyled("  Publishers:\n", bold=true)

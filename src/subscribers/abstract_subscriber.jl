@@ -13,6 +13,9 @@ Base.@kwdef mutable struct SubscriberFlags
 
     "Has the subscriber received a message"
     hasreceived::Bool = false
+
+    "Should the subscriber finish? Cleanest way to stop a subscriber task."
+    should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
 end
 
 abstract type Subscriber end
@@ -80,9 +83,17 @@ end
 @inline getcomtype(submsg::SubscribedMessage) = getcomtype(submsg.sub)
 isrunning(submsg::SubscribedMessage) = !isempty(submsg.task) && !istaskdone(submsg.task[end])
 
+# TODO: add a `close` method and modify the constructor to automatically create a subscriber
+
 function launchtask(submsg::SubscribedMessage)
     push!(submsg.task, @async subscribe(submsg))
     return submsg.task[end]
+end
+
+# NOTE: this won't work until the receive is non-blocking (upcoming PR)
+function stopsubscriber(submsg::SubscribedMessage)
+    getflags(submsg.sub).should_finish[] = true
+    wait(submsg.task[end])
 end
 
 function printstatus(sub::SubscribedMessage; indent=0)

@@ -38,7 +38,6 @@ struct ZmqSubscriber <: Subscriber
     name::String
     socket_lock::ReentrantLock
     flags::SubscriberFlags
-    should_finish::Threads.Atomic{Bool}
 
     function ZmqSubscriber(
         ctx::ZMQ.Context,
@@ -65,7 +64,6 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        should_finish = Threads.Atomic{Bool}(false)
         new(
             socket,
             port,
@@ -74,7 +72,6 @@ struct ZmqSubscriber <: Subscriber
             name,
             ReentrantLock(),
             SubscriberFlags(),
-            should_finish,
         )
     end
 end
@@ -148,7 +145,7 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
             receive(sub, buf, write_lock)
             GC.gc(false)
             yield()
-            if sub.should_finish[]
+            if getflags(sub).should_finish[]
                 break
             end
         end

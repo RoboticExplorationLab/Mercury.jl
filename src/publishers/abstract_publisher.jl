@@ -1,3 +1,7 @@
+Base.@kwdef mutable struct PublisherFlags
+    has_published::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
+end
+
 abstract type Publisher end
 
 Base.isopen(sub::Publisher)::Nothing =
@@ -5,6 +9,7 @@ Base.isopen(sub::Publisher)::Nothing =
 Base.close(sub::Publisher)::Nothing =
     error("The `close` method hasn't been implemented for your Publisher yet!")
 getname(pub::Publisher)::String = pub.name
+getflags(pub::Publisher)::PublisherFlags = pub.flags
 
 function publish(pub::Publisher, proto_msg::ProtoBuf.ProtoType)::Nothing
     throw(
@@ -30,10 +35,12 @@ end
 @inline getname(pubmsg::PublishedMessage) = pubmsg.name
 @inline getcomtype(pub::PublishedMessage) = getcomtype(pub.pub)
 
+# TODO: add a `close` method and modify the constructor to automatically create a subscriber
+
 function printstatus(pub::PublishedMessage; indent=0)
     prefix = " " ^ indent
     println(prefix, "Publisher: ", getname(pub))
     println(prefix, "  Type: ", getcomtype(pub))
     println(prefix, "  Message Type: ", typeof(pub.msg))
-    println(prefix, "  Has published? ", pub.pub.has_published[])
+    println(prefix, "  Has published? ", getflags(pub.pub).has_published[])
 end
