@@ -162,7 +162,6 @@ function receive(
     end
 end
 
-
 portstring(sub::SerialSubscriber) =
     "Serial Port-" * LibSerialPort.Lib.sp_get_port_name(sub.serial_port.ref)
 
