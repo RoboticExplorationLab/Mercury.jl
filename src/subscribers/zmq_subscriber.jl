@@ -65,7 +65,6 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        should_finish = Threads.Atomic{Bool}(false)
         new(
             socket,
             port,
@@ -161,7 +160,7 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
                 break
             end
         end
-        if sub.should_finish[]
+        if getflags(sub).should_finish[]
             @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
         else
             @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed"
