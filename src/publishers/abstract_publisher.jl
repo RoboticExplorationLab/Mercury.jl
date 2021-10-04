@@ -1,5 +1,9 @@
 Base.@kwdef mutable struct PublisherFlags
     has_published::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
+
+    "Should the publisher finish? Cleanest way to stop a publisher task."
+    "Specifically useful for stopping publishing in a different thread"
+    should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
 end
 
 abstract type Publisher end
@@ -24,10 +28,14 @@ Specifies a publisher along with specific message type.
 This is useful for tracking multiple messages at once
 """
 struct PublishedMessage
-    msg::ProtoBuf.ProtoType
+    msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}}
     pub::Publisher
     name::String
-    function PublishedMessage(msg::ProtoBuf.ProtoType, pub::Publisher; name = getname(pub))
+    function PublishedMessage(
+        msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}},
+        pub::Publisher;
+        name = getname(pub)
+        )
         new(msg, pub, name)
     end
 end

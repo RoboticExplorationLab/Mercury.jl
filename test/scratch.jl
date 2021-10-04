@@ -95,3 +95,26 @@ occursin(test2, test1)
 test1 = rand(UInt8, 16)
 test2 = rand(UInt8, 17)
 occursin(test2, test1)
+
+# %%
+
+struct MOTORS_C
+    front_left::Cfloat;
+    front_right::Cfloat;
+    back_right::Cfloat;
+    back_left::Cfloat;
+
+    time::Cdouble;
+end
+
+# %%
+using BenchmarkTools
+
+
+function test(mot::Vector{MOTORS_C})
+    mot[1] = MOTORS_C(rand(Float32), rand(Float32), rand(Float32), rand(Float32), rand(Float64))
+end
+
+# %%
+mot = [MOTORS_C(rand(Float32), rand(Float32), rand(Float32), rand(Float32), rand(Float64))]
+@btime test($mot)

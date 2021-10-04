@@ -21,7 +21,6 @@ I/O mechanisms are added to a `NodeIO` object via [`add_publisher!`](@ref) and
 """
 struct NodeIO
     ctx::Union{Nothing,ZMQ.Context}
-    # sp::Union{Nothing,LibSerialPort.SerialPort}
     pubs::Vector{PublishedMessage}
     subs::Vector{SubscribedMessage}
     opts::NodeOptions
@@ -70,7 +69,11 @@ Inside of `compute`:
     ...
 
 """
-function add_publisher!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, pub::Publisher)
+function add_publisher!(
+    nodeio::NodeIO,
+    msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}},
+    pub::Publisher
+    )
     push!(nodeio.pubs, PublishedMessage(msg, pub))
 end
 
@@ -244,7 +247,7 @@ numpublishers
 """
     getsubscriber(node, index)
     getsubscriber(node, name)
-   
+
 Get a  [`SubscribedMessage`](@ref) attached to `node`, either by it's integer index or it's name.
 """
 getsubscriber
@@ -252,7 +255,7 @@ getsubscriber
 """
     getpublisher(node, index)
     getpublisher(node, name)
-   
+
 Get a  [`PublishedMessage`](@ref) attached to `node`, either by it's integer index or it's name.
 """
 getpublisher

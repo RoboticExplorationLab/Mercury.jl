@@ -82,16 +82,16 @@ function subscribe(
             end
         end
         close(sub)
-        @warn "Shutting Down subscriber $(getname(sub)): $(portstring(sub)). Serial Port was closed."
+        @warn "Shutting Down subscriber $(getname(sub)): $(portstring(sub)). Port was closed."
     catch err
         sub.flags.diderror = true
         close(sub)
         @show typeof(err)
         if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
-            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket errored out."
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Subscriber errored out."
             rethrow(err)
         else
-            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket was forcefully closed."
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Force closing Subscriber."
         end
     end
     return nothing
