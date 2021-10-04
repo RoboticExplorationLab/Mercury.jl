@@ -27,7 +27,7 @@ struct NodeIO
     flags::NodeFlags
 
     function NodeIO(ctx::ZMQ.Context = ZMQ.context(); opts...)
-        new(ctx, PublishedMessage[], SubscribedMessage[], NodeOptions(opts...), NodeFlags())
+        new(ctx, PublishedMessage[], SubscribedMessage[], NodeOptions(;opts...), NodeFlags())
     end
 end
 
