@@ -15,20 +15,34 @@ Base.@kwdef mutable struct NodeFlags
     should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
 end
 
+"""
+    NodeHeartbeat
+
+Contains basic information about the node, and is responsible for publishing a ZMQ 
+message with this information, if the node option `heartbeat_enable` is set to true.
+
+The heartbeat is published at a given rate, specified by the `heartbeat_rate` node option.
+For best results, this should divide evenly into the higher rate at which the node runs.
+
+The address and port of the publisher are also specified in the node options.
+
+As part of the published info, the average rate of the node is calculated by this 
+struct between calls to `publish(pub, heartbeat, node)`. This is all handled internally 
+in the `launch` method for the node, and should be transparent to the user, who should 
+only indirectly interact with this type via the corresponding node options.
+"""
 mutable struct NodeHeartbeat
     print_rate_enable::Bool
     t_start::UInt64
     cnt::Int
     msg::NodeInfo
     rate::Float64
-    # pub::ZmqPublisher
     function NodeHeartbeat(ctx::ZMQ.Context, opts::NodeOptions)
         print_rate_enable = opts.heartbeat_print_rate_enable
         t_start = UInt64(0)
         cnt = 0
         msg = NodeInfo()
         rate = opts.heartbeat_rate
-        # pub = ZmqPublisher(ctx, opts.heartbeat_addr, opts.heartbeat_port)
         new(print_rate_enable, t_start, cnt, msg, rate)
     end
 end
@@ -305,8 +319,9 @@ function launch(node::Node)
     # Run any necessary startup
     startup(node)
 
-    init(heartbeat)
+    # Initialize the heartbeat publisher, if needed
     if opts.heartbeat_enable
+        init(heartbeat)
         heartbeat_pub = ZmqPublisher(getcontext(node), opts.heartbeat_addr, opts.heartbeat_port, 
             name=getname(node) * "_heartbeat_pub")
     end
@@ -320,6 +335,7 @@ function launch(node::Node)
             GC.gc(false)
             yield()
 
+            # publish the node heartbeat, if necessary
             if opts.heartbeat_enable
                 publish(heartbeat_pub, heartbeat, node)
             end
@@ -341,6 +357,7 @@ function launch(node::Node)
         end
         closeall(node)
     end
+    # Close the heartbeat publisher if it was set up
     if opts.heartbeat_enable
         close(heartbeat_pub)
     end
