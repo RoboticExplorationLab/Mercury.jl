@@ -38,7 +38,6 @@ struct ZmqSubscriber <: Subscriber
     name::String
     socket_lock::ReentrantLock
     flags::SubscriberFlags
-    should_finish::Threads.Atomic{Bool}
 
     function ZmqSubscriber(
         ctx::ZMQ.Context,
@@ -65,18 +64,7 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        @show isopen(socket)
-        should_finish = Threads.Atomic{Bool}(false)
-        new(
-            socket,
-            port,
-            ipaddr,
-            IOBuffer(),
-            name,
-            ReentrantLock(),
-            SubscriberFlags(),
-            should_finish,
-        )
+        new(socket, port, ipaddr, IOBuffer(), name, ReentrantLock(), SubscriberFlags())
     end
 end
 
@@ -96,10 +84,7 @@ function ZmqSubscriber(
     ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
 
-function Subscriber(sub::ZmqSubscriber)
-    return sub
-end
-
+getcomtype(::ZmqSubscriber) = :zmq
 Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
 
 function Base.close(sub::ZmqSubscriber, timeout = 1)
@@ -152,7 +137,7 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
             receive(sub, buf, write_lock)
             GC.gc(false)
             yield()
-            if sub.should_finish[]
+            if getflags(sub).should_finish[]
                 break
             end
         end
@@ -161,7 +146,6 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
     catch err
         sub.flags.diderror = true
         close(sub)
-        @show typeof(err)
         if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
             @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket errored out."
             rethrow(err)
