@@ -30,6 +30,7 @@ struct ZmqPublisher <: Publisher
     buffer::IOBuffer
     name::String
     ctx::ZMQ.Context
+    flags::PublisherFlags
 
     function ZmqPublisher(
         ctx::ZMQ.Context,
@@ -47,7 +48,7 @@ struct ZmqPublisher <: Publisher
             "Could not bind publisher $name to $(tcpstring(ipaddr, port))"
         )
         @info "Publishing $name on: $(tcpstring(ipaddr, port)), isopen = $(isopen(socket))"
-        new(socket, port, ipaddr, IOBuffer(), name, ctx)
+        new(socket, port, ipaddr, IOBuffer(), name, ctx, PublisherFlags())
     end
 end
 function ZmqPublisher(ctx::ZMQ.Context, ipaddr, port::Integer; name = genpublishername())
@@ -65,6 +66,7 @@ function ZmqPublisher(
     ZmqPublisher(ctx, ipaddr, parse(Int, port), name = name)
 end
 
+getcomtype(::ZmqPublisher) = :zmq
 Base.isopen(pub::ZmqPublisher) = Base.isopen(pub.socket)
 Base.close(pub::ZmqPublisher) = Base.close(pub.socket)
 
@@ -81,6 +83,7 @@ function publish(pub::ZmqPublisher, proto_msg::ProtoBuf.ProtoType)
         # NOTE: ZMQ will de-allocate the message allocated above, so garbage
         # collection should not be an issue here
         ZMQ.send(pub.socket, msg)
+        getflags(pub).has_published[] = true
 
         # Move to the beginning of the buffer
         seek(pub.buffer, 0)

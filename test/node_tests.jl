@@ -60,7 +60,6 @@ function Hg.setupIO!(node::SubNode, nodeio::Hg.NodeIO)
     port = 5555
     sub = Hg.ZmqSubscriber(ctx, addr, port)
     empty!(nodeio.subs)
-    empty!(nodeio.sub_tasks)
     Hg.add_subscriber!(nodeio, node.test_msg, sub)
 end
 
@@ -79,17 +78,35 @@ function Hg.compute(node::SubNode)
     println("Received x = $x")
 end
 
+
+println("######## NODE TESTS #############")
 ## Initialize publisher
 ctx = ZMQ.Context()
 node = PubNode(ctx)
 Hg.setupIO!(node, Hg.getIO(node))
+@test Hg.getname(node) == "PubNode"
+@test Hg.getname(Hg.getpublisher(node, 1)) == "test_pub"
+@test Hg.getname(Hg.getpublisher(node, 1).pub) == "test_pub"
+@test Hg.getname(Hg.getpublisher(node, "test_pub")) == "test_pub"
+@test Hg.getpublisher(node, "test_pub").msg isa TestMsg
+@test Hg.numpublishers(node) == 1
+@test Hg.numsubscribers(node) == 0
+
+Hg.printstatus(node)
 
 ## Initialize subscriber
 using Base.Threads
+Hg.reset_sub_count()
 subnode = SubNode()
 Hg.setupIO!(subnode, Hg.getIO(subnode))
-sub = Hg.getIO(subnode).subs[1]
+sub = Hg.getsubscriber(subnode, 1)
 @test isopen(sub.sub)
+@test sub === Hg.getsubscriber(subnode, "subscriber_1")
+@test isnothing(Hg.getsubscriber(subnode, "sub2"))
+@test Hg.numsubscribers(subnode) == 1
+@test Hg.numpublishers(subnode) == 0
+
+Hg.printstatus(subnode)
 
 ## Launch tasks
 task = @async Hg.launch(node)
@@ -105,15 +122,26 @@ subtask = Threads.@spawn Hg.launch(subnode)
 
 ##
 sleep(1)
-subnode.should_finish = true
-node.should_finish = true
+@test Hg.isrunning(Hg.getsubscriber(subnode, 1))
+Hg.stopnode(subnode)
+Hg.stopnode(node)
+@test !Hg.isrunning(Hg.getsubscriber(subnode, 1))
+@test !Hg.getflags(node).is_running[]
+@test !Hg.getflags(subnode).is_running[]
+
+@test !Hg.getflags(node).did_error[]
+@test !Hg.getflags(subnode).did_error[]
+Hg.printstatus(node)
+Hg.printstatus(subnode)
 
 sleep(0.5)
-pub = node.nodeio.pubs[1]
+pub = Hg.getpublisher(node, 1) 
 @test !isopen(pub.pub)
-sub = Hg.getIO(subnode).subs[1]
+sub = Hg.getsubscriber(subnode, 1) 
 @test !isopen(sub.sub)
-@test isempty(subnode.nodeio.sub_tasks)
+for submsg in subnode.nodeio.subs
+    @test isempty(submsg.task)
+end
 
 dx = node.test_msg.x - subnode.test_msg.x
 dy = node.test_msg.y - subnode.test_msg.y

@@ -64,16 +64,7 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        @show isopen(socket)
-        new(
-            socket,
-            port,
-            ipaddr,
-            IOBuffer(),
-            name,
-            ReentrantLock(),
-            SubscriberFlags(),
-        )
+        new(socket, port, ipaddr, IOBuffer(), name, ReentrantLock(), SubscriberFlags())
     end
 end
 
@@ -93,10 +84,7 @@ function ZmqSubscriber(
     ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
 end
 
-function Subscriber(sub::ZmqSubscriber)
-    return sub
-end
-
+getcomtype(::ZmqSubscriber) = :zmq
 Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
 
 function Base.close(sub::ZmqSubscriber, timeout = 1)

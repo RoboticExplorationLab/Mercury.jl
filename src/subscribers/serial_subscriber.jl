@@ -54,6 +54,7 @@ function SerialSubscriber(
     return SerialSubscriber(sp; name=name)
 end
 
+getcomtype(::SerialSubscriber) = :serial
 
 Base.isopen(sub::SerialSubscriber) = LibSerialPort.isopen(sub.serial_port)
 function Base.close(sub::SerialSubscriber)
