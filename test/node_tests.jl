@@ -115,26 +115,18 @@ task = @async Hg.launch(node)
 @test !istaskfailed(task)
 @test Hg.node_sockets_are_open(node)
 
-subnode.should_finish = false 
+Hg.getflags(subnode).should_finish[] = false
 subtask = Threads.@spawn Hg.launch(subnode)
 @test !istaskdone(subtask)
 @test !istaskfailed(subtask)
 @test Hg.node_sockets_are_open(subnode)
 
-
-
 ##
-sub = Hg.getsubscriber(subnode, 1)
-sock = sub.sub.socket
-msg = ZMQ.Message()
-Hg.settimeout!(sub.sub, -1)
-@time ZMQ.msg_recv(sock, msg, 0)
-Hg.settimeout!(sub.sub, 2000)
-
 sleep(1)
 @test Hg.isrunning(Hg.getsubscriber(subnode, 1))
+Hg.stopnode(node)     # closing publisher first should be fine
 Hg.stopnode(subnode)
-Hg.stopnode(node)
+sleep(0.1)  # give some time for the tasks to finish
 @test !Hg.isrunning(Hg.getsubscriber(subnode, 1))
 @test !Hg.getflags(node).is_running[]
 @test !Hg.getflags(subnode).is_running[]

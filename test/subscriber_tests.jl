@@ -103,67 +103,54 @@ ENV["JULIA_DEBUG"] = "Mercury"
         close(pub)
     end
 
-    # @testset "Receive performance" begin
-    #     ## Test receive performance
-    #     function pub_message(pub)
-    #         msg_out = TestMsg(x = 1, y = 2, z = 3)
-    #         global do_publish
-    #         i = 0
-    #         while (do_publish)
-    #             msg_out.x = i
-    #             Hg.publish(pub, msg_out)
-    #             i += 1
-    #             sleep(0.001)
-    #         end
-    #     end
-    #     sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
-    #     pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
-    #     msg = TestMsg(x = 10, y = 11, z = 12)
-    #     msg_out = TestMsg(x = 1, y = 2, z = 3)
+    @testset "Subscribe performance" begin
+        do_publish = Threads.Atomic{Bool}(true) 
 
-    #     # Close the task by waiting for a receive
-    #     sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
-    #     schedule(sub_task)
-    #     cnt = 0
-    #     timeout = 5.0 # seconds
-    #     @test Hg.publish_until_receive(pub, sub, msg_out, timeout)
-    #     @test !istaskdone(sub_task)
-    #     # sleep(1.0)
-    #     @show sub.flags.hasreceived
-    #     @test msg.x == msg_out.x
-    #     close_task = @async close(sub)
-    #     @test !istaskdone(close_task)  # waiting for receive to finish
-    #     @test isopen(sub)
-    #     @test isopen(pub)
-    #     @test sub.flags.isreceiving
-    #     @test islocked(sub.socket_lock)
+        function pub_message(pub)
+            msg_out = TestMsg(x = 1, y = 2, z = 3)
+            do_publish
+            i = 0
+            while (do_publish[])
+                msg_out.x = i
+                Hg.publish(pub, msg_out)
+                i += 1
+                sleep(0.001)
+            end
+        end
 
-    #     sub.flags.hasreceived = false
-    #     Hg.publish_until_receive(pub, sub, msg_out)
-    #     @test sub.flags.hasreceived
-    #     sleep(0.1)
-    #     @test istaskdone(close_task)  # should be closed now that the receive finished
-    #     @test !isopen(sub)
-    #     sleep(0.1)  # sleep to wait for socket to close and the subscribe loop to exit
-    #     @test istaskdone(sub_task)  # the subscriber task should finish after the socket is closed
-    #     @test !istaskfailed(sub_task)  # The task shouldn't end with an error
-    #     close(pub)
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
+        msg = TestMsg(x = 0, y = 0, z = 0)
 
-    #     sub = Hg.ZmqSubscriber(ctx, addr, port)
-    #     pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
-    #     sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
-    #     schedule(sub_task)
-    #     Hg.publish_until_receive(pub, sub, msg_out)
-    #     !istaskdone(sub_task)
-    #     Hg.forceclose(sub)
-    #     sleep(0.1)  # wait for the task to finish
-    #     @test istaskdone(sub_task)  # the subscriber task should finish after the socket is closed
-    #     @test !istaskfailed(sub_task) # the EOFError should be caught
-    #     @test !isopen(sub)
-    #     @test isopen(pub)
-    #     close(pub)
-    #     @test !isopen(pub)
-    # end
+        pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
+        msg_out = TestMsg(x = 10, y = 11, z = 12)
+        pub_task = @async pub_message(pub)
+        @test !istaskdone(pub_task)
+        @test !istaskfailed(pub_task)
+        # do_publish[] = false 
+        @test isopen(pub)
+
+        @test isopen(sub)
+        recv_lock = ReentrantLock()
+
+        # Retrieve 2 messages to make sure the publisher is working
+        Hg.receive(sub, msg, recv_lock) 
+        x_prev = msg.x
+        sleep(1.0)
+        Hg.receive(sub, msg, recv_lock) 
+        x_new = msg.x
+        @test x_new - x_prev > 200
+
+        # Benchmark the receive
+        b = @benchmark Hg.receive($sub, $msg, $recv_lock) 
+        @test maximum(b.gctimes) == 0  # no garbage collection
+        @test b.memory == 0            # no dynamic memory allocations
+
+        # Close task and sockets
+        do_publish[] = false
+        wait(pub_task)
+        close(sub)
+        close(pub)
+    end
 
     @testset "Testing Subscriber Conflate" begin
         ## Test receive performance
@@ -207,45 +194,9 @@ ENV["JULIA_DEBUG"] = "Mercury"
     end
 end
 
+##
 Hg.reset_sub_count()
 ctx = ZMQ.context()
 addr = ip"127.0.0.1"
 port = 5555
-
-function pub_message(pub)
-    msg_out = TestMsg(x = 1, y = 2, z = 3)
-    global do_publish
-    i = 0
-    while (do_publish[])
-        msg_out.x = i
-        Hg.publish(pub, msg_out)
-        i += 1
-        sleep(0.001)
-    end
-end
-
-sub = Hg.ZmqSubscriber(ctx, addr, port)
-msg = TestMsg(x = 0, y = 0, z = 0)
-
-pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
-msg_out = TestMsg(x = 10, y = 11, z = 12)
-do_publish = Threads.Atomic{Bool}(true) 
-pub_task = @async pub_message(pub)
-istaskdone(pub_task)
-istaskfailed(pub_task)
-do_publish[] = false 
-isopen(pub)
-
-isopen(sub)
-lock = ReentrantLock()
-Hg.receive(sub, msg, lock) 
-msg.x
-b = @benchmark Hg.receive($sub, $msg, $lock) 
-@test maximum(b.gctimes) == 0
-sub_task = @async Hg.subscribe(sub, msg, ReentrantLock())
-istaskdone(sub_task)
-istaskfailed(sub_task)
-
-close(sub)
-close(pub)
 

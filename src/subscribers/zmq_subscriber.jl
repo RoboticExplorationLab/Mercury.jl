@@ -117,11 +117,11 @@ end
 function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantLock())
     did_receive = false
     sub.flags.isreceiving = true
-    # bin_data = sub.zmsg
+    bin_data = sub.zmsg
 
+    bytes_read = Int32(0)
     if lock(()->isopen(sub), sub.socket_lock)
-        bin_data = sub.zmsg
-        bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
+        bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)::Int32
 
         if bytes_read == -1
             ZMQ.zmq_errno() == ZMQ.EAGAIN || throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
@@ -129,43 +129,24 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
             sub.flags.hasreceived = true
             did_receive = true
         end
-        # bin_data = ZMQ.recv(sub.socket)
 
         # Forces subscriber to conflate messages
         ZMQ.getproperty(sub.socket, :events)
 
     end
 
-    # lock(sub.socket_lock) do
-    #     if isopen(sub)  # must take lock before checking if the socket is open
-    #         # bin_data = ZMQ.Message()
-    #         # bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
-    #         if bytes_read == -1
-    #             ZMQ.zmq_errno() == ZMQ.EAGAIN || throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
-    #         else
-    #             sub.flags.hasreceived = true
-    #             did_receive = true
-    #         end
-    #         # bin_data = ZMQ.recv(sub.socket)
-
-    #         # Forces subscriber to conflate messages
-    #         ZMQ.getproperty(sub.socket, :events)
-    #     enda
-    # end
-    # sub.flags.isreceiving = false
-
-    # Why not just call IOBuffer(bin_data)?
-    # io = seek(convert(IOStream, bin_data), 0)
-    if did_receive
-        lock(write_lock) do
-            decode!(buf, bin_data) 
-            # seek(sub.buffer, 0)
-            # for i = 1:bytes_read
-            #     sub.buffer.data[i] = sub.zmsg[i]
-            # end
-            # sub.buffer.size = bytes_read
-            # ProtoBuf.readproto(sub.buffer, buf)
+    # Copy the data to the local buffer and decode
+    if did_receive 
+        seek(sub.buffer, 0)
+        sub.buffer.size = bytes_read
+        for i = 1:bytes_read
+            sub.buffer.data[i] = bin_data[i]
         end
+
+        # Obtain the lock for the destination buffer and decode the message data
+        lock(write_lock)
+        decode!(buf, sub.buffer)
+        unlock(write_lock)
     end
     return did_receive
 end
