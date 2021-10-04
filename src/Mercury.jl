@@ -16,6 +16,9 @@ elseif Sys.isapple()
 end
 const libhg = libhg_library_filename
 
+using Sockets: @ip_str
+
+include("proto/node_info_pb.jl")
 
 include("utils.jl")
 include("rate_limiter.jl")
