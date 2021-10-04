@@ -3,7 +3,7 @@ Base.@kwdef mutable struct NodeOptions
     rate::Float64 = 100
     default_addr::Sockets.IPv4 = ip"127.0.0.1"
     heartbeat_enable::Bool = false
-    heartbeat_addr::Sockets.IPv4 = default_addr 
+    heartbeat_addr::Sockets.IPv4 = default_addr
     heartbeat_port::Int = getdefaultport()
     heartbeat_rate::Float64 = 1.0  # Hz
     heartbeat_print_rate_enable::Bool = false
@@ -70,12 +70,17 @@ struct NodeIO
     opts::NodeOptions
     flags::NodeFlags
     heartbeat::NodeHeartbeat
-    name
 
     function NodeIO(ctx::ZMQ.Context = ZMQ.context(); opts...)
-        opts = NodeOptions(;opts...)
-        new(ctx, PublishedMessage[], SubscribedMessage[], opts, 
-            NodeFlags(), NodeHeartbeat(ctx, opts))
+        opts = NodeOptions(; opts...)
+        new(
+            ctx,
+            PublishedMessage[],
+            SubscribedMessage[],
+            opts,
+            NodeFlags(),
+            NodeHeartbeat(ctx, opts),
+        )
     end
 end
 
@@ -312,7 +317,7 @@ function launch(node::Node)
     lrl = LoopRateLimiter(rate)
     opts = getoptions(node)
     heartbeat = getIO(node).heartbeat
-    
+
     # Launch the subscriber tasks asynchronously
     start_subscribers(node)
 
@@ -322,14 +327,18 @@ function launch(node::Node)
     # Initialize the heartbeat publisher, if needed
     if opts.heartbeat_enable
         init(heartbeat)
-        heartbeat_pub = ZmqPublisher(getcontext(node), opts.heartbeat_addr, opts.heartbeat_port, 
-            name=getname(node) * "_heartbeat_pub")
+        heartbeat_pub = ZmqPublisher(
+            getcontext(node),
+            opts.heartbeat_addr,
+            opts.heartbeat_port,
+            name = getname(node) * "_heartbeat_pub",
+        )
     end
 
     getflags(node).is_running[] = true
     try
         @rate while !isnodedone(node)
-            
+
             compute(node)
 
             GC.gc(false)

@@ -73,7 +73,7 @@ struct ZmqSubscriber <: Subscriber
             name,
             ReentrantLock(),
             SubscriberFlags(),
-            ZMQ.Message()
+            ZMQ.Message(),
         )
     end
 end
@@ -117,7 +117,7 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     bin_data = sub.zmsg
 
     bytes_read = Int32(0)
-    if lock(()->isopen(sub), sub.socket_lock)
+    if lock(() -> isopen(sub), sub.socket_lock)
         bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)::Int32
 
         if bytes_read == -1
@@ -133,7 +133,7 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     end
 
     # Copy the data to the local buffer and decode
-    if did_receive 
+    if did_receive
         seek(sub.buffer, 0)
         sub.buffer.size = bytes_read
         for i = 1:bytes_read
@@ -152,7 +152,7 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
     @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(tcpstring(sub))"
 
     try
-        while lock(()->isopen(sub), sub.socket_lock)
+        while lock(() -> isopen(sub), sub.socket_lock)
             receive(sub, buf, write_lock)
             GC.gc(false)
             yield()

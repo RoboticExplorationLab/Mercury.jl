@@ -60,7 +60,7 @@ function getdefaultport()
     global DEFAULT_PORT
     port = DEFAULT_PORT
     DEFAULT_PORT += 1
-    return port 
+    return port
 end
 
 macro catchzmq(expr, errmsg)
