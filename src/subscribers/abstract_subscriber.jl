@@ -13,6 +13,9 @@ Base.@kwdef mutable struct SubscriberFlags
 
     "Has the subscriber received a message"
     hasreceived::Bool = false
+
+    "Should the subscriber finish? Cleanest way to stop a subscriber task."
+    should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
 end
 
 abstract type Subscriber end
@@ -76,18 +79,28 @@ struct SubscribedMessage
         new(msg, sub, ReentrantLock(), name, Task[])
     end
 end
-@inline subscribe(submsg::SubscribedMessage) = subscribe(submsg.sub, submsg.msg, submsg.lock)
+@inline subscribe(submsg::SubscribedMessage) =
+    subscribe(submsg.sub, submsg.msg, submsg.lock)
 @inline getname(submsg::SubscribedMessage) = submsg.name
 @inline getcomtype(submsg::SubscribedMessage) = getcomtype(submsg.sub)
-isrunning(submsg::SubscribedMessage) = !isempty(submsg.task) && !istaskdone(submsg.task[end])
+isrunning(submsg::SubscribedMessage) =
+    !isempty(submsg.task) && !istaskdone(submsg.task[end])
+
+# TODO: add a `close` method and modify the constructor to automatically create a subscriber
 
 function launchtask(submsg::SubscribedMessage)
     push!(submsg.task, @async subscribe(submsg))
     return submsg.task[end]
 end
 
-function printstatus(sub::SubscribedMessage; indent=0)
-    prefix = " " ^ indent
+# NOTE: this won't work until the receive is non-blocking (upcoming PR)
+function stopsubscriber(submsg::SubscribedMessage)
+    getflags(submsg.sub).should_finish[] = true
+    wait(submsg.task[end])
+end
+
+function printstatus(sub::SubscribedMessage; indent = 0)
+    prefix = " "^indent
     println(prefix, "Subscriber: ", getname(sub))
     println(prefix, "  Type: ", getcomtype(sub))
     println(prefix, "  Message Type: ", typeof(sub.msg))

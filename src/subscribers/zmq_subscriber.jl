@@ -38,7 +38,6 @@ struct ZmqSubscriber <: Subscriber
     name::String
     socket_lock::ReentrantLock
     flags::SubscriberFlags
-    should_finish::Threads.Atomic{Bool}
     zmsg::ZMQ.Message
 
     function ZmqSubscriber(
@@ -75,7 +74,6 @@ struct ZmqSubscriber <: Subscriber
             name,
             ReentrantLock(),
             SubscriberFlags(),
-            should_finish,
             ZMQ.Message()
         )
     end
@@ -159,7 +157,7 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
             receive(sub, buf, write_lock)
             GC.gc(false)
             yield()
-            if sub.should_finish[]
+            if getflags(sub).should_finish[]
                 break
             end
         end

@@ -192,11 +192,36 @@ ENV["JULIA_DEBUG"] = "Mercury"
         close(pub)
         close(sub)
     end
+
 end
 
-##
-Hg.reset_sub_count()
-ctx = ZMQ.context()
-addr = ip"127.0.0.1"
-port = 5555
+@testset "Published/Subscribed ZMQ Messages" begin
+    Hg.reset_sub_count()
+    ctx = ZMQ.Context()
+    addr = ip"127.0.0.1"
+    port = 5555
 
+    sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
+    pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
+    msg = TestMsg(x = 10, y = 11, z = 12)
+    msg_out = TestMsg(x = 1, y = 2, z = 3)
+
+    submsg = Hg.SubscribedMessage(msg, sub)
+    pubmsg = Hg.PublishedMessage(msg_out, pub)
+
+    Hg.launchtask(submsg)
+    @test Hg.isrunning(submsg)
+    @test !Hg.getflags(submsg.sub).hasreceived
+    while (!Hg.getflags(submsg.sub).hasreceived)
+        Hg.publish(pubmsg)
+        sleep(0.001)
+    end
+    @test Hg.getflags(submsg.sub).hasreceived
+    @test isopen(sub)
+    @test isopen(pub)
+    @test Hg.isrunning(submsg)
+    Hg.forceclose(sub)
+    close(pub)
+    sleep(0.2)  # give a little bit of time to close the task
+    @test !Hg.isrunning(submsg)
+end
