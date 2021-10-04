@@ -19,6 +19,9 @@ mutable struct SerialPublisher <: Publisher
     msg_out_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
     msg_out_length::Int64
 
+    flags::PublisherFlags
+
+
     function SerialPublisher(
         serial_port::LibSerialPort.SerialPort;
         name = genpublishername(),
@@ -35,8 +38,7 @@ mutable struct SerialPublisher <: Publisher
         msg_out_length = 0
 
         @info "Publishing $name on: $sp_name"
-        has_published = Threads.Atomic{Bool}(false)
-        new(serial_port, name, has_published, msg_out_buffer, msg_out_length)
+        new(serial_port, name, has_published, msg_out_buffer, msg_out_length, PublisherFlags())
     end
 end
 
@@ -128,7 +130,7 @@ function publish(pub::SerialPublisher, msg)
             throw(MercuryException("Can only safely encode 254 bytes at a time"))
         encode!(pub, msg)
         write(pub.serial_port, @view pub.msg_out_buffer[1:pub.msg_out_length])
-        pub.has_published[] = true
+        getflags(pub).has_published[] = true
     end
     return nothing
 end
