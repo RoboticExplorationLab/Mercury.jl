@@ -9,6 +9,8 @@ mutable struct SerialSubscriber <: Subscriber
     msg_in_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
     msg_in_length::Int64
 
+    buffer::IOBuffer
+
     flags::SubscriberFlags
 
     function SerialSubscriber(
@@ -25,6 +27,8 @@ mutable struct SerialSubscriber <: Subscriber
         msg_in_buffer = StaticArrays.@MVector zeros(UInt8, MSG_BLOCK_SIZE)
         msg_in_length = 0
 
+        buffer = IOBuffer(zeros(UInt8, MSG_BLOCK_SIZE))
+
         @info "Subscribing $name on serial port: `$(LibSerialPort.Lib.sp_get_port_name(serial_port.ref))`"
         new(
             serial_port,
@@ -32,6 +36,7 @@ mutable struct SerialSubscriber <: Subscriber
             read_buffer,
             msg_in_buffer,
             msg_in_length,
+            buffer,
             SubscriberFlags(),
         )
     end
@@ -42,7 +47,6 @@ function SerialSubscriber(
     baudrate::Int64;
     name = gensubscribername()
     )
-
     local sp
     @catchserial(
         begin
@@ -68,8 +72,7 @@ function read_packet(sub::SerialSubscriber)
     if isopen(sub) && (bytesavailable(sub.serial_port) > 0)
         while (bytesavailable(sub.serial_port) > 0)
             if read(sub.serial_port, UInt8) == delim
-                break
-                # Encountered end of previous packet
+                break # Encountered end of previous packet
             end
         end
 
@@ -82,8 +85,7 @@ function read_packet(sub::SerialSubscriber)
             end
         end
     end
-    # return nothing
-    # If serial port isn't open or flag byte isn't encountered in buffer return nothing
+    # If serial port isn't open or flag byte isn't encountered return empty view
     return @view UInt8[][:]
 end
 
@@ -133,6 +135,7 @@ function decodeCOBS(sub::SerialSubscriber, msg::AbstractVector{UInt8})
     return view(sub.msg_in_buffer, 1:sub.msg_in_length)
 end
 
+
 """
 Returns `true` if successfully read message from serial port
 """
@@ -141,26 +144,43 @@ function receive(
     buf,
     write_lock::ReentrantLock,
 )
+    did_receive = false
+    sub.flags.isreceiving = true
+
     if isopen(sub)
-        sub.flags.isreceiving = true
         encoded_msg = read_packet(sub)
         sub.flags.isreceiving = false
 
         if !isempty(encoded_msg)
             bin_data = decodeCOBS(sub, encoded_msg)
-
-            lock(write_lock) do
-                sub.flags.bytesrecieved = decode!(buf, bin_data)
-            end
+            bytes_read = length(bin_data)
+            sub.flags.bytesrecieved = bytes_read
 
             sub.flags.hasreceived = true
-            return true
+            did_receive = true
+        end
+    end
+
+    if bytes_read > length(sub.buffer.data)
+        @warn "Increasing buffer size for subscriber $(getname(sub)) from $(length(sub.buffer.data)) to $bytes_read."
+        sub.buffer.data = zeros(UInt8, bytes_read)
+        sub.buffer.size = bytes_read
+    end
+
+    # Copy the data to the local buffer and decode
+    if did_receive
+        seek(sub.buffer, 0)
+        sub.buffer.size = bytes_read
+        for i = 1:bytes_read
+            sub.buffer.data[i] = bin_data[i]
         end
 
-        return false
-    else
-        @warn "Attempting to receive a message on subscriber $(sub.name), which is closed"
+        lock(write_lock)
+            decode!(buf, sub.buffer)
+        unlock(write_lock)
     end
+
+    return did_receive
 end
 
 portstring(sub::SerialSubscriber) =

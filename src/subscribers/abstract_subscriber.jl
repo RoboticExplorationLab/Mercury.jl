@@ -43,18 +43,25 @@ function got_new!(sub::Subscriber)
     return flags.hasreceived
 end
 
+
+"""
+Read in the byte data into the message container buf. Returns the number of bytes read
+"""
 function decode!(buf::ProtoBuf.ProtoType, bin_data::IOBuffer)
-    # io = IOBuffer(bin_data)
-    # io = seek(convert(IOStream, bin_data), 0)
+    bytes_read = length(bin_data.data)
     ProtoBuf.readproto(bin_data, buf)
+
+    return bytes_read
 end
 
 function decode!(buf::AbstractVector{UInt8}, bin_data::IOBuffer)
-    for i = 1:min(length(buf), length(bin_data))
+    bytes_read = min(length(buf), length(bin_data.data))
+
+    for i = 1:bytes_read
         buf[i] = bin_data[i]
     end
 
-    return bytes_written
+    return bytes_read
 end
 
 function receive(sub::Subscriber, buf, write_lock::ReentrantLock = ReentrantLock())::Nothing
@@ -77,12 +84,16 @@ function subscribe(
                 break
             end
         end
+
+        if getflags(sub).should_finish[]
+            @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(portstring(sub))."
+        else
+            @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket was closed"
+        end
         close(sub)
-        @warn "Shutting Down subscriber $(getname(sub)): $(portstring(sub)). Port was closed."
     catch err
         sub.flags.diderror = true
         close(sub)
-        @show typeof(err)
         if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
             @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Subscriber errored out."
             rethrow(err)
@@ -90,6 +101,7 @@ function subscribe(
             @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Force closing Subscriber."
         end
     end
+
     return nothing
 end
 
