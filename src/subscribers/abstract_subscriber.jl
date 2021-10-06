@@ -55,10 +55,10 @@ function decode!(buf::ProtoBuf.ProtoType, bin_data::IOBuffer)
 end
 
 function decode!(buf::AbstractVector{UInt8}, bin_data::IOBuffer)
-    bytes_read = min(length(buf), length(bin_data.data))
+    bytes_read = min(length(buf), bin_data.size)
 
     for i = 1:bytes_read
-        buf[i] = bin_data[i]
+        buf[i] = bin_data.data[i]
     end
 
     return bytes_read

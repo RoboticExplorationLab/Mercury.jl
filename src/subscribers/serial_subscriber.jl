@@ -146,6 +146,7 @@ function receive(
 )
     did_receive = false
     sub.flags.isreceiving = true
+    bytes_read = 0
 
     if isopen(sub)
         encoded_msg = read_packet(sub)
