@@ -269,20 +269,21 @@ subscriber tasks and then calls the `compute` method at a fixed rate.
 This method should typically be wrapped in an `@async` or `@spawn` call.
 """
 function launch(node::Node)
-    rate = getrate(node)
-    lrl = LoopRateLimiter(rate)
-
-    # Launch the subscriber tasks asynchronously
-    start_subscribers(node)
-
-    # Run any necessary startup
-    startup(node)
-
-    # cnt = 0
-    # start_time = time()
-
-    getflags(node).is_running[] = true
     try
+        rate = getrate(node)
+        lrl = LoopRateLimiter(rate)
+
+        # Launch the subscriber tasks asynchronously
+        start_subscribers(node)
+
+        # Run any necessary startup
+        startup(node)
+
+        # cnt = 0
+        # start_time = time()
+
+        getflags(node).is_running[] = true
+
         @rate while !isnodedone(node)
             compute(node)
 
@@ -304,8 +305,10 @@ function launch(node::Node)
             @info "Closing node $(getname(node)). Got Keyboard Interrupt."
         else
             @warn "Closing node $(getname(node)). Closed with error."
+            @error "Node failed" exception=(err, catch_backtrace())
+
             Base.display_error(err)
-            Base.show_exception_stack(err, stacktrace())
+            Base.show_exception_stack(err, stacktrace(catch_backtrace()))
             getflags(node).did_error[] = true
             rethrow(err)
         end
