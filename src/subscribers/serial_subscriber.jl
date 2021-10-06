@@ -96,7 +96,7 @@ to decode message block.
 """
 function decodeCOBS(sub::SerialSubscriber, msg::AbstractVector{UInt8})
     incoming_msg_size = length(msg)
-    incoming_msg_size == 0 && error("Empty message passed to encode!")
+    incoming_msg_size < 2 && error("Empty message passed to encode!")
     incoming_msg_size > MSG_BLOCK_SIZE &&
         error("Can only safely encode 256 bytes at a time")
 
