@@ -51,4 +51,5 @@ function printstatus(pub::PublishedMessage; indent = 0)
     println(prefix, "  Type: ", getcomtype(pub))
     println(prefix, "  Message Type: ", typeof(pub.msg))
     println(prefix, "  Has published? ", getflags(pub.pub).has_published[])
+    println(prefix, "  Is Open? ", isopen(pub.pub))
 end
