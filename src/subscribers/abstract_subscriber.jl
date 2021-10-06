@@ -36,12 +36,13 @@ function got_new!(sub::Subscriber)
     return flags.hasreceived
 end
 
-function decode!(buf::ProtoBuf.ProtoType, bin_data)
-    io = seek(convert(IOStream, bin_data), 0)
-    ProtoBuf.readproto(io, buf)
+function decode!(buf::ProtoBuf.ProtoType, bin_data::IOBuffer)
+    # io = IOBuffer(bin_data)
+    # io = seek(convert(IOStream, bin_data), 0)
+    ProtoBuf.readproto(bin_data, buf)
 end
 
-function decode!(buf::AbstractVector{UInt8}, bin_data)
+function decode!(buf::AbstractVector{UInt8}, bin_data::IOBuffer)
     for i = 1:min(length(buf), length(bin_data))
         buf[i] = bin_data[i]
     end
@@ -106,6 +107,7 @@ function printstatus(sub::SubscribedMessage; indent = 0)
     println(prefix, "  Is running? ", !isempty(sub.task) && !istaskdone(sub.task[end]))
     println(prefix, "  Is failed? ", !isempty(sub.task) && istaskfailed(sub.task[end]))
     println(prefix, "  Has received? ", getflags(sub.sub).hasreceived)
+    println(prefix, "  Is Open? ", isopen(sub.sub))
 end
 
 """

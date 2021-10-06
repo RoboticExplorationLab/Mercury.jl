@@ -294,9 +294,10 @@ function launch(node::Node)
     catch err
         if err isa InterruptException
             @info "Closing node $(getname(node)). Got Keyboard Interrupt."
-            # Close everything
         else
             @warn "Closing node $(getname(node)). Closed with error."
+            Base.display_error(err)
+            Base.show_exception_stack(sterr, stacktrace())
             getflags(node).did_error[] = true
             rethrow(err)
         end
@@ -319,7 +320,7 @@ function closeall(node::Node)
     nodeio = getIO(node)
     # Close publishers and subscribers
     for submsg in nodeio.subs
-        forceclose(submsg.sub)
+        close(submsg.sub)
     end
     for pubmsg in nodeio.pubs
         close(pubmsg.pub)

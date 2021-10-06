@@ -38,12 +38,14 @@ struct ZmqSubscriber <: Subscriber
     name::String
     socket_lock::ReentrantLock
     flags::SubscriberFlags
+    zmsg::ZMQ.Message
 
     function ZmqSubscriber(
         ctx::ZMQ.Context,
         ipaddr::Sockets.IPv4,
         port::Integer;
         name = gensubscribername(),
+        buffersize = 255,
     )
         local socket
         @catchzmq(
@@ -64,33 +66,39 @@ struct ZmqSubscriber <: Subscriber
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
-        new(socket, port, ipaddr, IOBuffer(), name, ReentrantLock(), SubscriberFlags())
+        new(
+            socket,
+            port,
+            ipaddr,
+            IOBuffer(zeros(UInt8, buffersize)),
+            name,
+            ReentrantLock(),
+            SubscriberFlags(),
+            ZMQ.Message(),
+        )
     end
 end
 
-function ZmqSubscriber(ctx::ZMQ.Context, ipaddr, port::Integer; name = gensubscribername())
+function ZmqSubscriber(ctx::ZMQ.Context, ipaddr, port::Integer; kwargs...)
     if !(ipaddr isa Sockets.IPv4)
         ipaddr = Sockets.IPv4(ipaddr)
     end
-    ZmqSubscriber(ctx, ipaddr, port, name = name)
+    ZmqSubscriber(ctx, ipaddr, port; kwargs...)
 end
 
-function ZmqSubscriber(
-    ctx::ZMQ.Context,
-    ipaddr,
-    port::AbstractString;
-    name = gensubscribername(),
-)
-    ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
+function ZmqSubscriber(ctx::ZMQ.Context, ipaddr, port::AbstractString; kwargs...)
+    ZmqSubscriber(ctx, ipaddr, parse(Int, port); kwargs...)
 end
 
 getcomtype(::ZmqSubscriber) = :zmq
 Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
 
-function Base.close(sub::ZmqSubscriber, timeout = 1)
+function Base.close(sub::ZmqSubscriber)
     lock(sub.socket_lock) do
-        @info "Closing ZmqSubscriber: $(getname(sub))"
-        close(sub.socket)
+        if isopen(sub.socket)
+            @debug "Closing ZmqSubscriber: $(getname(sub))"
+            close(sub.socket)
+        end
     end
 end
 
@@ -102,38 +110,52 @@ end
 function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantLock())
     did_receive = false
     sub.flags.isreceiving = true
-    local bin_data
-    lock(sub.socket_lock) do
-        if isopen(sub)  # must take lock before checking if the socket is open
-            # bin_data = ZMQ.Message()
-            # bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)
-            bin_data = ZMQ.recv(sub.socket)
+    bin_data = sub.zmsg
 
-            # Once blocking is finished we know we've recieved a new message
+    bytes_read = Int32(0)
+    if lock(() -> isopen(sub), sub.socket_lock)
+        bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)::Int32
+
+        if bytes_read == -1
+            ZMQ.zmq_errno() == ZMQ.EAGAIN || throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
+        else
             sub.flags.hasreceived = true
             did_receive = true
-
-            # Forces subscriber to conflate messages
-            ZMQ.getproperty(sub.socket, :events)
         end
-    end
-    sub.flags.isreceiving = false
 
-    # Why not just call IOBuffer(bin_data)?
-    # io = seek(convert(IOStream, bin_data), 0)
+        # Forces subscriber to conflate messages
+        ZMQ.getproperty(sub.socket, :events)
+
+    end
+
+    # TODO: test this code to make sure it works in practice
+    if bytes_read > length(sub.buffer.data)
+        @warn "Increasing buffer size for subscriber $(getname(sub)) from $(length(sub.buffer.data)) to $bytes_read."
+        sub.buffer.data = zeros(UInt8, bytes_read)
+        sub.buffer.size = bytes_read
+    end
+
+    # Copy the data to the local buffer and decode
     if did_receive
-        lock(write_lock) do
-            decode!(buf, bin_data)
-            # ProtoBuf.readproto(io, proto_msg)
+        seek(sub.buffer, 0)
+        sub.buffer.size = bytes_read
+        for i = 1:bytes_read
+            sub.buffer.data[i] = bin_data[i]
         end
+
+        # Obtain the lock for the destination buffer and decode the message data
+        lock(write_lock)
+        decode!(buf, sub.buffer)
+        unlock(write_lock)
     end
+    return did_receive
 end
 
 function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
     @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(tcpstring(sub))"
 
     try
-        while isopen(sub)
+        while lock(() -> isopen(sub), sub.socket_lock)
             receive(sub, buf, write_lock)
             GC.gc(false)
             yield()
@@ -141,16 +163,20 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
                 break
             end
         end
+        if getflags(sub).should_finish[]
+            @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
+        else
+            @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed"
+        end
         close(sub)
-        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
     catch err
         sub.flags.diderror = true
         close(sub)
         if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
-            @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket errored out."
+            @warn "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket errored out."
             rethrow(err)
         else
-            @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was forcefully closed."
+            @warn "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was forcefully closed."
         end
     end
 
