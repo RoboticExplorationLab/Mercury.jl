@@ -45,6 +45,7 @@ struct ZmqSubscriber <: Subscriber
         ipaddr::Sockets.IPv4,
         port::Integer;
         name = gensubscribername(),
+        buffersize = 255,
     )
         local socket
         @catchzmq(
@@ -69,29 +70,24 @@ struct ZmqSubscriber <: Subscriber
             socket,
             port,
             ipaddr,
-            IOBuffer(zeros(UInt8, 255)),
+            IOBuffer(zeros(UInt8, buffersize)),
             name,
             ReentrantLock(),
             SubscriberFlags(),
-            ZMQ.Message()
+            ZMQ.Message(),
         )
     end
 end
 
-function ZmqSubscriber(ctx::ZMQ.Context, ipaddr, port::Integer; name = gensubscribername())
+function ZmqSubscriber(ctx::ZMQ.Context, ipaddr, port::Integer; kwargs...)
     if !(ipaddr isa Sockets.IPv4)
         ipaddr = Sockets.IPv4(ipaddr)
     end
-    ZmqSubscriber(ctx, ipaddr, port, name = name)
+    ZmqSubscriber(ctx, ipaddr, port; kwargs...)
 end
 
-function ZmqSubscriber(
-    ctx::ZMQ.Context,
-    ipaddr,
-    port::AbstractString;
-    name = gensubscribername(),
-)
-    ZmqSubscriber(ctx, ipaddr, parse(Int, port), name = name)
+function ZmqSubscriber(ctx::ZMQ.Context, ipaddr, port::AbstractString; kwargs...)
+    ZmqSubscriber(ctx, ipaddr, parse(Int, port); kwargs...)
 end
 
 getcomtype(::ZmqSubscriber) = :zmq
@@ -117,7 +113,7 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     bin_data = sub.zmsg
 
     bytes_read = Int32(0)
-    if lock(()->isopen(sub), sub.socket_lock)
+    if lock(() -> isopen(sub), sub.socket_lock)
         bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)::Int32
 
         if bytes_read == -1
@@ -132,8 +128,15 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
 
     end
 
+    # TODO: test this code to make sure it works in practice
+    if bytes_read > length(sub.buffer.data)
+        @warn "Increasing buffer size for subscriber $(getname(sub)) from $(length(sub.buffer.data)) to $bytes_read."
+        sub.buffer.data = zeros(UInt8, bytes_read)
+        sub.buffer.size = bytes_read
+    end
+
     # Copy the data to the local buffer and decode
-    if did_receive 
+    if did_receive
         seek(sub.buffer, 0)
         sub.buffer.size = bytes_read
         for i = 1:bytes_read
@@ -152,7 +155,7 @@ function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
     @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(tcpstring(sub))"
 
     try
-        while lock(()->isopen(sub), sub.socket_lock)
+        while lock(() -> isopen(sub), sub.socket_lock)
             receive(sub, buf, write_lock)
             GC.gc(false)
             yield()

@@ -68,7 +68,7 @@ end
 
 getcomtype(::ZmqPublisher) = :zmq
 Base.isopen(pub::ZmqPublisher) = Base.isopen(pub.socket)
-function Base.close(pub::ZmqPublisher) 
+function Base.close(pub::ZmqPublisher)
     if isopen(pub.socket)
         @debug "Closing ZmqPublisher: $(getname(pub))"
         Base.close(pub.socket)
