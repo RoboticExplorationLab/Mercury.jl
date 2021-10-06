@@ -305,7 +305,7 @@ function launch(node::Node)
         else
             @warn "Closing node $(getname(node)). Closed with error."
             Base.display_error(err)
-            Base.show_exception_stack(sterr, stacktrace())
+            Base.show_exception_stack(err, stacktrace())
             getflags(node).did_error[] = true
             rethrow(err)
         end
@@ -335,8 +335,10 @@ function closeall(node::Node)
     end
     # Wait for async tasks to finish
     for submsg in nodeio.subs
-        wait(submsg.task[end])
-        pop!(submsg.task)
+        if !isempty(submsg.task)
+            wait(submsg.task[end])
+            pop!(submsg.task)
+        end
     end
 
     return nothing
