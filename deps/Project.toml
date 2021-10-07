@@ -1,2 +1,3 @@
 [deps]
 CMake = "631607c0-34d2-5d66-819e-eb0f9aa2061a"
+ProtoBuf = "3349acd9-ac6a-5e09-bcdb-63829b23a429"

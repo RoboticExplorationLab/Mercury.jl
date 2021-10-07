@@ -14,13 +14,14 @@ mutable struct PubNode <: Hg.Node
     should_finish::Bool
 end
 
-function PubNode(ctx)
+function PubNode(ctx; opts...)
     test_msg = TestMsg(x = 10, y = 10, z = 10)
-    nodedata = Hg.NodeIO()
+    nodedata = Hg.NodeIO(ctx; opts...)
     PubNode(ctx, nodedata, test_msg, false)
 end
 
-function Hg.setupIO!(node::PubNode, nodeio::Hg.NodeIO)
+function Hg.setupIO!(node::PubNode)
+    nodeio = Hg.getIO(node)
     ctx = node.ctx
     addr = ip"127.0.0.1"
     port = 5555
@@ -48,13 +49,14 @@ mutable struct SubNode <: Hg.Node
     should_finish::Bool
 end
 
-function SubNode(ctx = ZMQ.Context())
+function SubNode(ctx = ZMQ.Context(); opts...)
     test_msg = TestMsg(x=0, y=0, z=0)
-    nodedata = Hg.NodeIO()
+    nodedata = Hg.NodeIO(ctx; opts...)
     SubNode(ctx, nodedata, test_msg, false)
 end
 
-function Hg.setupIO!(node::SubNode, nodeio::Hg.NodeIO)
+function Hg.setupIO!(node::SubNode)
+    nodeio = Hg.getIO(node)
     ctx = node.ctx
     addr = ip"127.0.0.1"
     port = 5555
@@ -79,34 +81,40 @@ function Hg.compute(node::SubNode)
 end
 
 
-println("######## NODE TESTS #############")
-## Initialize publisher
-ctx = ZMQ.Context()
-node = PubNode(ctx)
-Hg.setupIO!(node, Hg.getIO(node))
-@test Hg.getname(node) == "PubNode"
-@test Hg.getname(Hg.getpublisher(node, 1)) == "test_pub"
-@test Hg.getname(Hg.getpublisher(node, 1).pub) == "test_pub"
-@test Hg.getname(Hg.getpublisher(node, "test_pub")) == "test_pub"
-@test Hg.getpublisher(node, "test_pub").msg isa TestMsg
-@test Hg.numpublishers(node) == 1
-@test Hg.numsubscribers(node) == 0
+function create_publisher(;opts...)
+    ctx = ZMQ.Context()
+    node = PubNode(ctx; opts...)
+    Hg.setupIO!(node)
+    @test Hg.getname(node) == "PubNode"
+    @test Hg.getname(Hg.getpublisher(node, 1)) == "test_pub"
+    @test Hg.getname(Hg.getpublisher(node, 1).pub) == "test_pub"
+    @test Hg.getname(Hg.getpublisher(node, "test_pub")) == "test_pub"
+    @test Hg.getpublisher(node, "test_pub").msg isa TestMsg
+    @test Hg.numpublishers(node) == 1
+    @test Hg.numsubscribers(node) == 0
+    return node
+end
 
-Hg.printstatus(node)
-
-## Initialize subscriber
 using Base.Threads
-Hg.reset_sub_count()
-subnode = SubNode()
-Hg.setupIO!(subnode, Hg.getIO(subnode))
-sub = Hg.getsubscriber(subnode, 1)
-@test isopen(sub.sub)
-@test sub === Hg.getsubscriber(subnode, "subscriber_1")
-@test isnothing(Hg.getsubscriber(subnode, "sub2"))
-@test Hg.numsubscribers(subnode) == 1
-@test Hg.numpublishers(subnode) == 0
+function create_subscriber()
+    Hg.reset_sub_count()
+    subnode = SubNode()
+    Hg.setupIO!(subnode)
+    sub = Hg.getsubscriber(subnode, 1)
+    @test isopen(sub.sub)
+    @test sub === Hg.getsubscriber(subnode, "subscriber_1")
+    @test isnothing(Hg.getsubscriber(subnode, "sub2"))
+    @test Hg.numsubscribers(subnode) == 1
+    @test Hg.numpublishers(subnode) == 0
+    return subnode
+end
 
-Hg.printstatus(subnode)
+## Initialize nodes 
+@testset "Basic pub/sub" begin
+println("######## NODE TESTS #############")
+node = create_publisher()
+subnode = create_subscriber()
+
 
 ## Launch tasks
 task = @async Hg.launch(node)
@@ -151,3 +159,24 @@ dz = node.test_msg.z - subnode.test_msg.z
 @test abs(dy) <= 2
 @test abs(dz) <= 3
 @show node.test_msg.x
+end
+
+## Test heartbeat
+@testset "Heartbeat" begin
+node = create_publisher(heartbeat_enable=true)
+@test Hg.getoptions(node).heartbeat_enable
+task = @async Hg.launch(node)
+
+sub = Hg.ZmqSubscriber(Hg.getcontext(node), Hg.getoptions(node).heartbeat_addr, 
+    Hg.getoptions(node).heartbeat_port, name="PubInfo_subscriber")
+info_msg = Hg.NodeInfo()
+while !Hg.receive(sub, info_msg, ReentrantLock())
+    sleep(0.001)
+end
+@test info_msg.num_publishers == 1
+@test info_msg.num_subscribers == 0
+info_msg.rate
+@test abs(info_msg.rate - 10) < 0.5
+@test info_msg.all_sockets_open
+Hg.stopnode(node)
+end

@@ -1,6 +1,12 @@
 
 Base.@kwdef mutable struct NodeOptions
     rate::Float64 = 100
+    default_addr::Sockets.IPv4 = ip"127.0.0.1"
+    heartbeat_enable::Bool = false
+    heartbeat_addr::Sockets.IPv4 = default_addr
+    heartbeat_port::Int = getdefaultport()
+    heartbeat_rate::Float64 = 1.0  # Hz
+    heartbeat_print_rate_enable::Bool = false
 end
 
 Base.@kwdef mutable struct NodeFlags
@@ -8,6 +14,43 @@ Base.@kwdef mutable struct NodeFlags
     is_running::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
     should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
 end
+
+"""
+    NodeHeartbeat
+
+Contains basic information about the node, and is responsible for publishing a ZMQ 
+message with this information, if the node option `heartbeat_enable` is set to true.
+
+The heartbeat is published at a given rate, specified by the `heartbeat_rate` node option.
+For best results, this should divide evenly into the higher rate at which the node runs.
+
+The address and port of the publisher are also specified in the node options.
+
+As part of the published info, the average rate of the node is calculated by this 
+struct between calls to `publish(pub, heartbeat, node)`. This is all handled internally 
+in the `launch` method for the node, and should be transparent to the user, who should 
+only indirectly interact with this type via the corresponding node options.
+"""
+mutable struct NodeHeartbeat
+    print_rate_enable::Bool
+    t_start::UInt64
+    cnt::Int
+    msg::NodeInfo
+    rate::Float64
+    function NodeHeartbeat(ctx::ZMQ.Context, opts::NodeOptions)
+        print_rate_enable = opts.heartbeat_print_rate_enable
+        t_start = UInt64(0)
+        cnt = 0
+        msg = NodeInfo()
+        rate = opts.heartbeat_rate
+        new(print_rate_enable, t_start, cnt, msg, rate)
+    end
+end
+
+function init(hbt::NodeHeartbeat)
+    hbt.t_start = time_ns()
+end
+
 
 """
     NodeIO
@@ -26,9 +69,18 @@ struct NodeIO
     subs::Vector{SubscribedMessage}
     opts::NodeOptions
     flags::NodeFlags
+    heartbeat::NodeHeartbeat
 
     function NodeIO(ctx::ZMQ.Context = ZMQ.context(); opts...)
-        new(ctx, PublishedMessage[], SubscribedMessage[], NodeOptions(opts...), NodeFlags())
+        opts = NodeOptions(; opts...)
+        new(
+            ctx,
+            PublishedMessage[],
+            SubscribedMessage[],
+            opts,
+            NodeFlags(),
+            NodeHeartbeat(ctx, opts),
+        )
     end
 end
 
@@ -163,7 +215,7 @@ compute(::Node)::Nothing =
 
 # NOTE: This method may be automatically defined using codegen and the TOML file
 #       in the future
-setupIO!(::Node, ::NodeIO) =
+setupIO!(node::Node) =
     error("The `setupIO` method hasn't been implemented for your node yet!")
 
 ##############################
@@ -263,6 +315,8 @@ This method should typically be wrapped in an `@async` or `@spawn` call.
 function launch(node::Node)
     rate = getrate(node)
     lrl = LoopRateLimiter(rate)
+    opts = getoptions(node)
+    heartbeat = getIO(node).heartbeat
 
     # Launch the subscriber tasks asynchronously
     start_subscribers(node)
@@ -270,23 +324,30 @@ function launch(node::Node)
     # Run any necessary startup
     startup(node)
 
-    # cnt = 0
-    # start_time = time()
+    # Initialize the heartbeat publisher, if needed
+    if opts.heartbeat_enable
+        init(heartbeat)
+        heartbeat_pub = ZmqPublisher(
+            getcontext(node),
+            opts.heartbeat_addr,
+            opts.heartbeat_port,
+            name = getname(node) * "_heartbeat_pub",
+        )
+    end
 
     getflags(node).is_running[] = true
     try
         @rate while !isnodedone(node)
+
             compute(node)
 
             GC.gc(false)
             yield()
 
-            # cnt += 1
-            # if cnt % 1000 == 0
-            #     end_time = time()
-            #     println(1000 / (end_time - start_time))
-            #     start_time = time()
-            # end
+            # publish the node heartbeat, if necessary
+            if opts.heartbeat_enable
+                publish(heartbeat_pub, heartbeat, node)
+            end
 
         end lrl
         @info "Closing node $(getname(node))"
@@ -297,11 +358,17 @@ function launch(node::Node)
         else
             @warn "Closing node $(getname(node)). Closed with error."
             Base.display_error(err)
-            Base.show_exception_stack(sterr, stacktrace())
+            println()
             getflags(node).did_error[] = true
+            closeall(node)
+            getflags(node).is_running[] = false
             rethrow(err)
         end
         closeall(node)
+    end
+    # Close the heartbeat publisher if it was set up
+    if opts.heartbeat_enable
+        close(heartbeat_pub)
     end
     getflags(node).is_running[] = false
 end
@@ -363,3 +430,30 @@ function printstatus(node::Node)
     end
 end
 #! format: on
+
+function publish(heartbeat_pub, hbt::NodeHeartbeat, node::Node)
+    ns_elapsed = time_ns() - hbt.t_start
+    s_elapsed = ns_elapsed * 1e-9
+    if s_elapsed > (1 / hbt.rate)
+        # Calculate the average rate since the last publish
+        avg_rate = hbt.cnt / s_elapsed
+
+        # Update the message fields
+        hbt.msg.name = getname(node)
+        hbt.msg.num_publishers = numpublishers(node)
+        hbt.msg.num_subscribers = numsubscribers(node)
+        hbt.msg.all_sockets_open = node_sockets_are_open(node)
+        hbt.msg.rate = avg_rate
+        if hbt.print_rate_enable
+            println("Average rate: ", avg_rate, "Hz")
+        end
+
+        # Publish the NodeInfo message
+        @debug "Publishing heartbeat..."
+        publish(heartbeat_pub, hbt.msg)
+
+        hbt.t_start = time_ns()
+        hbt.cnt = 0
+    end
+    hbt.cnt += 1
+end

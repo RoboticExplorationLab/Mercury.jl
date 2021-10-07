@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+message NodeInfo {
+    string name = 1;
+    sfixed32 num_publishers = 2;
+    sfixed32 num_subscribers = 3;
+    bool all_sockets_open = 5;
+    double rate = 4;
+}

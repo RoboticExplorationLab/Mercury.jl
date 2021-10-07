@@ -54,7 +54,14 @@ function gensubscribername()
     return name
 end
 
-
+DEFAULT_PORT = 6000;
+reset_default_port() = global DEFAULT_PORT = 6000;
+function getdefaultport()
+    global DEFAULT_PORT
+    port = DEFAULT_PORT
+    DEFAULT_PORT += 1
+    return port
+end
 
 macro catchzmq(expr, errmsg)
     ex = quote
