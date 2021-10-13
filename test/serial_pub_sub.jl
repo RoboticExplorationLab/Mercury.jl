@@ -102,8 +102,8 @@ using BenchmarkTools
         end
 
         # Test simple pub/sub on same port
-        pub = Hg.SerialPublisher(out_port_name, baudrate);
-        sub = Hg.SerialSubscriber(in_port_name, baudrate);
+        pub = Hg.SerialPublisher(out_port_name, baudrate)
+        sub = Hg.SerialSubscriber(in_port_name, baudrate)
         msg = TestMsg(x = 10, y = 11, z = 12)
 
         @test msg.x == 10
@@ -152,54 +152,54 @@ using BenchmarkTools
     # end
 end
 
-# %%
-import Mercury as Hg
-using Test
-using BenchmarkTools
+# # %%
+# import Mercury as Hg
+# using Test
+# using BenchmarkTools
 
-include("jlout/test_msg_pb.jl")
-out_port_name = "/dev/tty.usbmodem14201"
-in_port_name = "/dev/tty.usbmodem14201"
-baudrate = 57600
+# include("jlout/test_msg_pb.jl")
+# out_port_name = "/dev/tty.usbmodem14201"
+# in_port_name = "/dev/tty.usbmodem14201"
+# baudrate = 57600
 
-# %%
-sub = Hg.SerialSubscriber(in_port_name, baudrate);
-close(sub)
-pub = Hg.SerialPublisher(out_port_name, baudrate);
-close(pub)
+# # %%
+# sub = Hg.SerialSubscriber(in_port_name, baudrate);
+# close(sub)
+# pub = Hg.SerialPublisher(out_port_name, baudrate);
+# close(pub)
 
-# %%
-test_data = rand(UInt8, 150);
-test_data[test_data .== 0x00] .= 0x01
-too_big_test_data = rand(UInt8, 600)
+# # %%
+# test_data = rand(UInt8, 150);
+# test_data[test_data .== 0x00] .= 0x01
+# too_big_test_data = rand(UInt8, 600)
 
-# Check encode and decode are inverses of one another
-code_decode_results = Hg.decodeSLIP(sub, Hg.encodeSLIP(pub, test_data))
-@test all(code_decode_results .== test_data)
-# %%
-Hg.is_valid_packet(Hg.encodeSLIP(pub, test_data))
+# # Check encode and decode are inverses of one another
+# code_decode_results = Hg.decodeSLIP(sub, Hg.encodeSLIP(pub, test_data))
+# @test all(code_decode_results .== test_data)
+# # %%
+# Hg.is_valid_packet(Hg.encodeSLIP(pub, test_data))
 
-# %%
-# Check that decoding a vector without any 0x00 byte fails
-@test Hg.decodeSLIP(sub, test_data) === nothing
-# Check that the encode fails if messages are too big
-@test begin
-    try
-        Hg.encode(pub, too_big_test_data)
-    catch e
-        e isa ErrorException ? true : false
-    end
-end
-too_big_test_data[too_big_test_data .== 0x00] .= 0x01
-# Check that the decode fails if messages are too big
-@test begin
-    try
-        Hg.decode(sub, too_big_test_data)
-    catch e
-        e isa ErrorException ? true : false
-    end
-end
+# # %%
+# # Check that decoding a vector without any 0x00 byte fails
+# @test Hg.decodeSLIP(sub, test_data) === nothing
+# # Check that the encode fails if messages are too big
+# @test begin
+#     try
+#         Hg.encode(pub, too_big_test_data)
+#     catch e
+#         e isa ErrorException ? true : false
+#     end
+# end
+# too_big_test_data[too_big_test_data .== 0x00] .= 0x01
+# # Check that the decode fails if messages are too big
+# @test begin
+#     try
+#         Hg.decode(sub, too_big_test_data)
+#     catch e
+#         e isa ErrorException ? true : false
+#     end
+# end
 
-close(sub)
-close(pub)
-end
+# close(sub)
+# close(pub)
+# end

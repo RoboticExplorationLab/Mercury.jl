@@ -28,14 +28,14 @@ Specifies a publisher along with specific message type.
 This is useful for tracking multiple messages at once
 """
 struct PublishedMessage
-    msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}}
+    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}}
     pub::Publisher
     name::String
     function PublishedMessage(
-        msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}},
+        msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
         pub::Publisher;
-        name = getname(pub)
-        )
+        name = getname(pub),
+    )
         new(msg, pub, name)
     end
 end

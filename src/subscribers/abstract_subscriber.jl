@@ -68,11 +68,7 @@ function receive(sub::Subscriber, buf, write_lock::ReentrantLock = ReentrantLock
     error("The `receive` method hasn't been implemented for your Subscriber yet!")
 end
 
-function subscribe(
-    sub::Subscriber,
-    buf,
-    write_lock::ReentrantLock,
-)
+function subscribe(sub::Subscriber, buf, write_lock::ReentrantLock)
     @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(portstring(sub))"
 
     try
@@ -111,14 +107,14 @@ This is useful for tracking multiple messages at once
 """
 struct SubscribedMessage
     # Handle case in which listening for byte array or for protobuf (see decode!)
-    msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}}
+    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}}
     sub::Subscriber          # Note this is an abstract type
     lock::ReentrantLock
     name::String
     task::Vector{Task}
 
     function SubscribedMessage(
-        msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}},
+        msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
         sub::Subscriber;
         name = getname(sub),
     )

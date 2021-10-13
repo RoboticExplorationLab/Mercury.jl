@@ -27,7 +27,13 @@ struct NodeIO
     flags::NodeFlags
 
     function NodeIO(ctx::ZMQ.Context = ZMQ.context(); opts...)
-        new(ctx, PublishedMessage[], SubscribedMessage[], NodeOptions(;opts...), NodeFlags())
+        new(
+            ctx,
+            PublishedMessage[],
+            SubscribedMessage[],
+            NodeOptions(; opts...),
+            NodeFlags(),
+        )
     end
 end
 
@@ -71,9 +77,9 @@ Inside of `compute`:
 """
 function add_publisher!(
     nodeio::NodeIO,
-    msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}},
-    pub::Publisher
-    )
+    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
+    pub::Publisher,
+)
     push!(nodeio.pubs, PublishedMessage(msg, pub))
 end
 
@@ -124,9 +130,9 @@ In `compute`:
 """
 function add_subscriber!(
     nodeio::NodeIO,
-    msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}},
-    sub::Subscriber
-    )
+    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
+    sub::Subscriber,
+)
     push!(nodeio.subs, SubscribedMessage(msg, sub))
 end
 
@@ -294,7 +300,7 @@ function launch(node::Node)
             @info "Closing node $(getname(node)). Got Keyboard Interrupt."
         else
             @warn "Closing node $(getname(node)). Closed with error."
-            @error "Node failed" exception=(err, catch_backtrace())
+            @error "Node failed" exception = (err, catch_backtrace())
 
             Base.display_error(err)
             Base.show_exception_stack(err, stacktrace(catch_backtrace()))

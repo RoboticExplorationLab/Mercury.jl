@@ -42,20 +42,16 @@ mutable struct SerialSubscriber <: Subscriber
     end
 end
 
-function SerialSubscriber(
-    port_name::String,
-    baudrate::Int64;
-    name = gensubscribername()
-    )
+function SerialSubscriber(port_name::String, baudrate::Int64; name = gensubscribername())
     local sp
     @catchserial(
         begin
-            sp = LibSerialPort.open(port_name, baudrate; mode=LibSerialPort.SP_MODE_READ)
+            sp = LibSerialPort.open(port_name, baudrate; mode = LibSerialPort.SP_MODE_READ)
             LibSerialPort.close(sp)
         end,
         "Failed to connect to serial port at: `$port_name`"
     )
-    return SerialSubscriber(sp; name=name)
+    return SerialSubscriber(sp; name = name)
 end
 
 getcomtype(::SerialSubscriber) = :serial
@@ -155,11 +151,7 @@ end
 """
 Returns `true` if successfully read message from serial port
 """
-function receive(
-    sub::SerialSubscriber,
-    buf,
-    write_lock::ReentrantLock,
-)
+function receive(sub::SerialSubscriber, buf, write_lock::ReentrantLock)
     did_receive = false
     sub.flags.isreceiving = true
     bytes_read = 0
@@ -202,4 +194,3 @@ end
 
 portstring(sub::SerialSubscriber) =
     "Serial Port-" * LibSerialPort.Lib.sp_get_port_name(sub.serial_port.ref)
-

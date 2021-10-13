@@ -24,7 +24,7 @@ function Hg.setupIO!(node::PubNode, nodeio::Hg.NodeIO)
     ctx = node.ctx
     addr = ip"127.0.0.1"
     port = 5555
-    pub = Hg.ZmqPublisher(ctx, addr, port, name="test_pub")
+    pub = Hg.ZmqPublisher(ctx, addr, port, name = "test_pub")
     empty!(nodeio.pubs)
     Hg.add_publisher!(nodeio, node.test_msg, pub)
     return nothing
@@ -49,7 +49,7 @@ mutable struct SubNode <: Hg.Node
 end
 
 function SubNode(ctx = ZMQ.Context())
-    test_msg = TestMsg(x=0, y=0, z=0)
+    test_msg = TestMsg(x = 0, y = 0, z = 0)
     nodedata = Hg.NodeIO()
     SubNode(ctx, nodedata, test_msg, false)
 end
@@ -136,9 +136,9 @@ Hg.printstatus(node)
 Hg.printstatus(subnode)
 
 sleep(0.5)
-pub = Hg.getpublisher(node, 1) 
+pub = Hg.getpublisher(node, 1)
 @test !isopen(pub.pub)
-sub = Hg.getsubscriber(subnode, 1) 
+sub = Hg.getsubscriber(subnode, 1)
 @test !isopen(sub.sub)
 for submsg in subnode.nodeio.subs
     @test isempty(submsg.task)

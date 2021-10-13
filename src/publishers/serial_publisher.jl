@@ -112,7 +112,8 @@ function encode!(pub::SerialPublisher, payload::ProtoBuf.ProtoType)
 end
 
 function encode!(pub::SerialPublisher, payload::AbstractVector{UInt8})
-    length(payload) <= length(pub.msg_out_buffer)-2 || throw(MercuryException("Can only send messages of size $(MSG_BLOCK_SIZE-2)"))
+    length(payload) <= length(pub.msg_out_buffer) - 2 ||
+        throw(MercuryException("Can only send messages of size $(MSG_BLOCK_SIZE-2)"))
     encoded_msg = encodeCOBS(pub, payload)
 end
 

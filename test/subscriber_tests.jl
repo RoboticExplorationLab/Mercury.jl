@@ -71,7 +71,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         @test sub.flags.hasreceived
 
         # make sure the correct message was received
-        @test msg.x == 1 
+        @test msg.x == 1
         @test msg.y == 2
         @test msg.z == 3
         close(pub)
@@ -104,7 +104,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
     end
 
     @testset "Subscribe performance" begin
-        do_publish = Threads.Atomic{Bool}(true) 
+        do_publish = Threads.Atomic{Bool}(true)
 
         function pub_message(pub)
             msg_out = TestMsg(x = 1, y = 2, z = 3)
@@ -133,15 +133,15 @@ ENV["JULIA_DEBUG"] = "Mercury"
         recv_lock = ReentrantLock()
 
         # Retrieve 2 messages to make sure the publisher is working
-        Hg.receive(sub, msg, recv_lock) 
+        Hg.receive(sub, msg, recv_lock)
         x_prev = msg.x
         sleep(1.0)
-        Hg.receive(sub, msg, recv_lock) 
+        Hg.receive(sub, msg, recv_lock)
         x_new = msg.x
         @test x_new - x_prev > 200
 
         # Benchmark the receive
-        b = @benchmark Hg.receive($sub, $msg, $recv_lock) 
+        b = @benchmark Hg.receive($sub, $msg, $recv_lock)
         @test maximum(b.gctimes) == 0  # no garbage collection
         @test b.memory == 0            # no dynamic memory allocations
 
@@ -181,7 +181,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
 
         Hg.receive(sub, msg)
         first_rec = msg.x
-        sleep(.5)
+        sleep(0.5)
         Hg.receive(sub, msg)
         second_rec = msg.x
         @test second_rec > first_rec + 10
