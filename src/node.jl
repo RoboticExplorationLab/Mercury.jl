@@ -21,14 +21,19 @@ I/O mechanisms are added to a `NodeIO` object via [`add_publisher!`](@ref) and
 """
 struct NodeIO
     ctx::Union{Nothing,ZMQ.Context}
-    # sp::Union{Nothing,LibSerialPort.SerialPort}
     pubs::Vector{PublishedMessage}
     subs::Vector{SubscribedMessage}
     opts::NodeOptions
     flags::NodeFlags
 
     function NodeIO(ctx::ZMQ.Context = ZMQ.context(); opts...)
-        new(ctx, PublishedMessage[], SubscribedMessage[], NodeOptions(opts...), NodeFlags())
+        new(
+            ctx,
+            PublishedMessage[],
+            SubscribedMessage[],
+            NodeOptions(; opts...),
+            NodeFlags(),
+        )
     end
 end
 
@@ -70,7 +75,11 @@ Inside of `compute`:
     ...
 
 """
-function add_publisher!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, pub::Publisher)
+function add_publisher!(
+    nodeio::NodeIO,
+    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
+    pub::Publisher,
+)
     push!(nodeio.pubs, PublishedMessage(msg, pub))
 end
 
@@ -119,7 +128,11 @@ In `compute`:
     # use node.local_test_msg in the rest of the code
     ...
 """
-function add_subscriber!(nodeio::NodeIO, msg::ProtoBuf.ProtoType, sub::Subscriber)
+function add_subscriber!(
+    nodeio::NodeIO,
+    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
+    sub::Subscriber,
+)
     push!(nodeio.subs, SubscribedMessage(msg, sub))
 end
 
@@ -170,6 +183,7 @@ setupIO!(::Node, ::NodeIO) =
 # OPTIONAL INTERFACE
 ##############################
 startup(::Node)::Nothing = nothing
+finishup(::Node)::Nothing = nothing
 getcontext(node::Node)::Union{Nothing,ZMQ.Context} = getIO(node).ctx
 getIO(node::Node)::NodeIO = node.nodeio
 
@@ -239,7 +253,7 @@ numpublishers
 """
     getsubscriber(node, index)
     getsubscriber(node, name)
-   
+
 Get a  [`SubscribedMessage`](@ref) attached to `node`, either by it's integer index or it's name.
 """
 getsubscriber
@@ -247,7 +261,7 @@ getsubscriber
 """
     getpublisher(node, index)
     getpublisher(node, name)
-   
+
 Get a  [`PublishedMessage`](@ref) attached to `node`, either by it's integer index or it's name.
 """
 getpublisher
@@ -261,33 +275,23 @@ subscriber tasks and then calls the `compute` method at a fixed rate.
 This method should typically be wrapped in an `@async` or `@spawn` call.
 """
 function launch(node::Node)
-    rate = getrate(node)
-    lrl = LoopRateLimiter(rate)
-
-    # Launch the subscriber tasks asynchronously
-    start_subscribers(node)
-
-    # Run any necessary startup
-    startup(node)
-
-    # cnt = 0
-    # start_time = time()
-
-    getflags(node).is_running[] = true
     try
+        rate = getrate(node)
+        lrl = LoopRateLimiter(rate)
+
+        # Launch the subscriber tasks asynchronously
+        start_subscribers(node)
+
+        # Run any necessary startup
+        startup(node)
+
+        getflags(node).is_running[] = true
+
         @rate while !isnodedone(node)
             compute(node)
 
             GC.gc(false)
             yield()
-
-            # cnt += 1
-            # if cnt % 1000 == 0
-            #     end_time = time()
-            #     println(1000 / (end_time - start_time))
-            #     start_time = time()
-            # end
-
         end lrl
         @info "Closing node $(getname(node))"
         closeall(node)
@@ -296,8 +300,10 @@ function launch(node::Node)
             @info "Closing node $(getname(node)). Got Keyboard Interrupt."
         else
             @warn "Closing node $(getname(node)). Closed with error."
+            @error "Node failed" exception = (err, catch_backtrace())
+
             Base.display_error(err)
-            Base.show_exception_stack(sterr, stacktrace())
+            Base.show_exception_stack(err, stacktrace(catch_backtrace()))
             getflags(node).did_error[] = true
             rethrow(err)
         end
@@ -327,8 +333,10 @@ function closeall(node::Node)
     end
     # Wait for async tasks to finish
     for submsg in nodeio.subs
-        wait(submsg.task[end])
-        pop!(submsg.task)
+        if !isempty(submsg.task)
+            wait(submsg.task[end])
+            pop!(submsg.task)
+        end
     end
 
     return nothing

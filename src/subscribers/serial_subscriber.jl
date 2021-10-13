@@ -1,17 +1,15 @@
-const MSG_BLOCK_SIZE = 256
 const SERIAL_PORT_BUFFER_SIZE = 1024
+const MSG_BLOCK_SIZE = 256
 
 mutable struct SerialSubscriber <: Subscriber
     serial_port::LibSerialPort.SerialPort
-
     name::String
 
     read_buffer::StaticArrays.MVector{SERIAL_PORT_BUFFER_SIZE,UInt8}
-
-    proto_msg_size::Union{Int64,Nothing}
-
     msg_in_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
     msg_in_length::Int64
+
+    buffer::IOBuffer
 
     flags::SubscriberFlags
 
@@ -26,21 +24,19 @@ mutable struct SerialSubscriber <: Subscriber
 
         # Buffer for dumping read bytes into
         read_buffer = StaticArrays.@MVector zeros(UInt8, SERIAL_PORT_BUFFER_SIZE)
-
-        proto_msg_size = nothing
-
-        # Vector written to when encoding Protobuf using COBS protocol
         msg_in_buffer = StaticArrays.@MVector zeros(UInt8, MSG_BLOCK_SIZE)
         msg_in_length = 0
 
-        @info "Subscribing $name on serial port"
+        buffer = IOBuffer(zeros(UInt8, MSG_BLOCK_SIZE))
+
+        @info "Subscribing $name on serial port: `$(LibSerialPort.Lib.sp_get_port_name(serial_port.ref))`"
         new(
             serial_port,
             name,
             read_buffer,
-            proto_msg_size,
             msg_in_buffer,
             msg_in_length,
+            buffer,
             SubscriberFlags(),
         )
     end
@@ -50,12 +46,11 @@ function SerialSubscriber(port_name::String, baudrate::Int64; name = gensubscrib
     local sp
     @catchserial(
         begin
-            sp = LibSerialPort.open(port_name, baudrate)
+            sp = LibSerialPort.open(port_name, baudrate; mode = LibSerialPort.SP_MODE_READ)
             LibSerialPort.close(sp)
         end,
         "Failed to connect to serial port at: `$port_name`"
     )
-
     return SerialSubscriber(sp; name = name)
 end
 
@@ -66,37 +61,54 @@ function Base.close(sub::SerialSubscriber)
     @info "Closing SerialSubscriber: $(getname(sub))"
     LibSerialPort.close(sub.serial_port)
 end
+forceclose(sub::SerialSubscriber) = close(sub)
 
-"""
-    Base.readuntil(ard::Arduino, delim::UInt8)
-Reads byte by byte from arduinos serial port stream and copies into
-read buffer until 0x00 flag bit is encountered. Returns view into
-read buffer if found complete message and nothing otherwise.
-"""
-function Base.readuntil(sub::SerialSubscriber, delim::UInt8)
+function read_packet(sub::SerialSubscriber)
+    delim = 0x00
     if isopen(sub) && (bytesavailable(sub.serial_port) > 0)
+        # byte_ref = Ref{UInt8}(0)
+        while bytesavailable(sub.serial_port) > 0
+            if read(sub.serial_port, UInt8) == delim
+                break # Encountered end of previous packet
+            end
+
+            # LibSerialPort.Lib.sp_nonblocking_read(sub.serial_port.ref, byte_ref, 1)
+            # if byte_ref.x == delim
+            #     break # Encountered end of previous packet
+            # end
+        end
+
         for i = 1:length(sub.read_buffer)
             # Read one byte from LibSerialPort.SerialPort buffer into publishers
             # local buffer one byte at a time until delim byte encoutered then return
             sub.read_buffer[i] = read(sub.serial_port, UInt8)
-            if sub.read_buffer[i] == delim #0x00
-                return @view sub.read_buffer[max(1, i + 1 - MSG_BLOCK_SIZE):i]
+
+            # LibSerialPort.Lib.sp_nonblocking_read(sub.serial_port.ref, byte_ref, 1)
+            # sub.read_buffer[i] = byte_ref.x
+
+            if sub.read_buffer[i] == delim
+                ret_buf = @view sub.read_buffer[max(1, i + 1 - MSG_BLOCK_SIZE):i]
+                if length(ret_buf) < 2
+                    ret_buf = @view UInt8[][:]
+                end
+                # LibSerialPort.sp_flush(sub.serial_port, LibSerialPort.SP_BUF_INPUT)
+
+                return ret_buf
             end
         end
     end
-    # return nothing
-    # If serial port isn't open or flag byte isn't encountered in buffer return nothing
+    # If serial port isn't open or flag byte isn't encountered return empty view
     return @view UInt8[][:]
 end
 
 """
-    decode(msg)
+    decodeCOBS(msg)
 Uses [COBS](https://en.wikipedia.org/wiki/Consistent_Overhead_Byte_Stuffing)
 to decode message block.
 """
-function decode(sub::SerialSubscriber, msg::AbstractVector{UInt8})
+function decodeCOBS(sub::SerialSubscriber, msg::AbstractVector{UInt8})
     incoming_msg_size = length(msg)
-    incoming_msg_size == 0 && error("Empty message passed to encode!")
+    incoming_msg_size < 2 && error("Empty message passed to encode!")
     incoming_msg_size > MSG_BLOCK_SIZE &&
         error("Can only safely encode 256 bytes at a time")
 
@@ -135,90 +147,50 @@ function decode(sub::SerialSubscriber, msg::AbstractVector{UInt8})
     return view(sub.msg_in_buffer, 1:sub.msg_in_length)
 end
 
+
 """
 Returns `true` if successfully read message from serial port
 """
-function receive(
-    sub::SerialSubscriber,
-    proto_msg::ProtoBuf.ProtoType,
-    write_lock::ReentrantLock,
-)
-    # Make sure that proto_msg_size is initialized
-    set_proto_msg_size!(sub, proto_msg)
+function receive(sub::SerialSubscriber, buf, write_lock::ReentrantLock)
+    did_receive = false
+    sub.flags.isreceiving = true
+    bytes_read = 0
 
     if isopen(sub)
-        sub.flags.isreceiving = true
-        encoded_msg = readuntil(sub, 0x00)
+        encoded_msg = read_packet(sub)
         sub.flags.isreceiving = false
 
-        # if encoded_msg !== nothing
         if !isempty(encoded_msg)
-            # @info "Recieved encoded message"
-            decoded_msg = decode(sub, encoded_msg)
-
-            # @info "Recieved: $(length(encoded_msg)), Expected: $(sub.proto_msg_size)"
-
-            # if length(decoded_msg) == sub.proto_msg_size
-            # @info "Decoded Message"
-
-            lock(write_lock) do
-                ProtoBuf.readproto(IOBuffer(decoded_msg), proto_msg)
-            end
+            bin_data = decodeCOBS(sub, encoded_msg)
+            bytes_read = length(bin_data)
+            sub.flags.bytesrecieved = bytes_read
 
             sub.flags.hasreceived = true
-            return true
-            # end
+            did_receive = true
         end
-
-        return false
-    else
-        @warn "Attempting to receive a message on subscriber $(sub.name), which is closed"
-    end
-end
-
-"""
-Loops recieve(sub::Subscriber, proto_msg::ProtoBuf.ProtoType, write_lock=ReentrantLock())
-"""
-function subscribe(
-    sub::SerialSubscriber,
-    proto_msg::ProtoBuf.ProtoType,
-    write_lock::ReentrantLock,
-)
-    @info "$(sub.name): Listening for message type: $(typeof(proto_msg)), on: $(portstring(sub))"
-
-    try
-        while isopen(sub)
-            receive(sub, proto_msg, write_lock)
-            GC.gc(false)
-            yield()
-        end
-        @info "Shutting Down subscriber $(getname(sub)): $(portstring(sub)). Serial Port was closed."
-    catch err
-        sub.flags.diderror = true
-        close(sub)
-        @warn "Shutting Down $(typeof(proto_msg)) subscriber: $(portstring(sub))"
-        @error err exception = (err, catch_backtrace())
     end
 
-    return nothing
-end
+    if bytes_read > length(sub.buffer.data)
+        @warn "Increasing buffer size for subscriber $(getname(sub)) from $(length(sub.buffer.data)) to $bytes_read."
+        sub.buffer.data = zeros(UInt8, bytes_read)
+        sub.buffer.size = bytes_read
+    end
 
+    # Copy the data to the local buffer and decode
+    if did_receive
+        seek(sub.buffer, 0)
+        sub.buffer.size = bytes_read
+        for i = 1:bytes_read
+            sub.buffer.data[i] = bin_data[i]
+        end
+
+        lock(write_lock)
+        decode!(buf, sub.buffer)
+        unlock(write_lock)
+    end
+
+    return did_receive
+end
 
 portstring(sub::SerialSubscriber) =
     "Serial Port-" * LibSerialPort.Lib.sp_get_port_name(sub.serial_port.ref)
-
-"""
-Helper function to set the proto_msg_size attribute of a SerialSubscriber.
-Inorder to be able to identify if readuntil() returns a full protobuf message, you
-need to know the length of the message that will be decoded.
-"""
-function set_proto_msg_size!(sub::SerialSubscriber, proto_msg::ProtoBuf.ProtoType)::Nothing
-    if isnothing(sub.proto_msg_size)
-        sub.proto_msg_size = ProtoBuf.writeproto(IOBuffer(), proto_msg)
-    end
-
-    if !(0 < sub.proto_msg_size < MSG_BLOCK_SIZE - 2)
-        err = ErrorException()
-        @error err exception = (err, catch_backtrace())
-    end
-end

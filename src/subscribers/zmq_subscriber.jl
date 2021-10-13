@@ -62,7 +62,7 @@ struct ZmqSubscriber <: Subscriber
         )
         @catchzmq(
             ZMQ.connect(socket, "tcp://$ipaddr:$port"),
-            "Could not connect subscriber $name to port $(tcpstring(ipaddr, port))."
+            "Could not connect subscriber $name to port $(portstring(ipaddr, port))."
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
@@ -91,7 +91,9 @@ function ZmqSubscriber(ctx::ZMQ.Context, ipaddr, port::AbstractString; kwargs...
 end
 
 getcomtype(::ZmqSubscriber) = :zmq
-Base.isopen(sub::ZmqSubscriber) = isopen(sub.socket)
+function Base.isopen(sub::ZmqSubscriber)
+    return lock(() -> isopen(sub.socket), sub.socket_lock)
+end
 
 function Base.close(sub::ZmqSubscriber)
     lock(sub.socket_lock) do
@@ -113,8 +115,9 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     bin_data = sub.zmsg
 
     bytes_read = Int32(0)
-    if lock(() -> isopen(sub), sub.socket_lock)
+    if isopen(sub)
         bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)::Int32
+        sub.flags.bytesrecieved = bytes_read
 
         if bytes_read == -1
             ZMQ.zmq_errno() == ZMQ.EAGAIN || throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
@@ -125,7 +128,6 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
 
         # Forces subscriber to conflate messages
         ZMQ.getproperty(sub.socket, :events)
-
     end
 
     # TODO: test this code to make sure it works in practice
@@ -148,42 +150,11 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
         decode!(buf, sub.buffer)
         unlock(write_lock)
     end
+
     return did_receive
 end
 
-function subscribe(sub::ZmqSubscriber, buf, write_lock::ReentrantLock)
-    @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(tcpstring(sub))"
-
-    try
-        while lock(() -> isopen(sub), sub.socket_lock)
-            receive(sub, buf, write_lock)
-            GC.gc(false)
-            yield()
-            if getflags(sub).should_finish[]
-                break
-            end
-        end
-        if getflags(sub).should_finish[]
-            @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
-        else
-            @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed"
-        end
-        close(sub)
-    catch err
-        sub.flags.diderror = true
-        close(sub)
-        if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
-            @warn "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket errored out."
-            rethrow(err)
-        else
-            @warn "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was forcefully closed."
-        end
-    end
-
-    return nothing
-end
-
-tcpstring(sub::ZmqSubscriber) = tcpstring(sub.ipaddr, sub.port)
+portstring(sub::ZmqSubscriber) = tcpstring(sub.ipaddr, sub.port)
 
 """
     publish_until_receive(pub, sub, msg_out; [timeout])

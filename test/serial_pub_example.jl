@@ -10,7 +10,7 @@ pub = Hg.SerialPublisher("/dev/ttyUSB0", 57600);
 stop = Threads.Atomic{Bool}(false)
 pub_task = @async begin
     Hg.@rate for i = 1:10
-        numblinks = UInt8(mod1(i,5))
+        numblinks = UInt8(mod1(i, 5))
         println("Blinking $numblinks times")
         Hg.publish(pub, UInt8[numblinks])
         if stop[]

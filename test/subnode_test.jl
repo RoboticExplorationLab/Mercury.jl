@@ -1,4 +1,5 @@
-import Pkg; Pkg.activate(@__DIR__)
+import Pkg;
+Pkg.activate(@__DIR__);
 import Mercury as Hg
 using ZMQ
 using Sockets
@@ -15,7 +16,7 @@ struct SubNode <: Hg.Node
 end
 
 function SubNode(ctx = ZMQ.Context())
-    test_msg = TestMsg(x=0, y=0, z=0)
+    test_msg = TestMsg(x = 0, y = 0, z = 0)
     nodedata = Hg.NodeData()
     SubNode(ctx, nodedata, test_msg)
 end

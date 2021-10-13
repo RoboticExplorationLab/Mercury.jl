@@ -8,11 +8,13 @@ Write data over a serial port.
 mutable struct SerialPublisher <: Publisher
     serial_port::LibSerialPort.SerialPort
     name::String
-    has_published::Threads.Atomic{Bool}
 
     # Buffer for encoded messages
     msg_out_buffer::StaticArrays.MVector{MSG_BLOCK_SIZE,UInt8}
     msg_out_length::Int64
+
+    flags::PublisherFlags
+
 
     function SerialPublisher(
         serial_port::LibSerialPort.SerialPort;
@@ -30,15 +32,14 @@ mutable struct SerialPublisher <: Publisher
         msg_out_length = 0
 
         @info "Publishing $name on: $sp_name"
-        has_published = Threads.Atomic{Bool}(false)
-        new(serial_port, name, has_published, msg_out_buffer, msg_out_length)
+        new(serial_port, name, msg_out_buffer, msg_out_length, PublisherFlags())
     end
 end
 
 """
     SerialPublisher(port_name::String, baudrate::Integer; [name])
 
-Create a publisher attached to the serial port at `port_name` with a communicate rate of 
+Create a publisher attached to the serial port at `port_name` with a communicate rate of
 `baudrate`. Automatically tries to open the port.
 """
 function SerialPublisher(port_name::String, baudrate::Integer; name = genpublishername())
@@ -59,9 +60,11 @@ getcomtype(::SerialPublisher) = :serial
 Base.isopen(pub::SerialPublisher) = LibSerialPort.isopen(pub.serial_port)
 function Base.close(pub::SerialPublisher)
     @info "Closing SerialPublisher: $(getname(pub)) on: $(portstring(pub))"
-    LibSerialPort.close(pub.serial_port)
+    getflags(pub).should_finish[] = true
+    while isopen(pub)
+        LibSerialPort.close(pub.serial_port)
+    end
 end
-
 
 function Base.open(pub::SerialPublisher)
     if !isopen(pub)
@@ -109,20 +112,23 @@ function encode!(pub::SerialPublisher, payload::ProtoBuf.ProtoType)
 end
 
 function encode!(pub::SerialPublisher, payload::AbstractVector{UInt8})
-    for i = 1:length(payload)
-        pub.msg_out_buffer[i] = payload[i]
-    end
-    pub.msg_out_length = length(payload)
+    length(payload) <= length(pub.msg_out_buffer) - 2 ||
+        throw(MercuryException("Can only send messages of size $(MSG_BLOCK_SIZE-2)"))
+    encoded_msg = encodeCOBS(pub, payload)
 end
 
 function publish(pub::SerialPublisher, msg)
+    # if getflags(pub).should_finish[]
+    #     close(pub)
+    # elseif isopen(pub)
     if isopen(pub)
         length(msg) == 0 && throw(MercuryException("Empty message passed to encode!"))
         length(msg) > 254 &&
             throw(MercuryException("Can only safely encode 254 bytes at a time"))
-        encode!(pub, msg)
-        write(pub.serial_port, @view pub.msg_out_buffer[1:pub.msg_out_length])
-        pub.has_published[] = true
+        encoded_msg = encode!(pub, msg)
+
+        write(pub.serial_port, encoded_msg)
+        getflags(pub).has_published[] = true
     end
     return nothing
 end

@@ -15,7 +15,7 @@ struct SerializedVICONcpp
     quaternion_y::Float32
     quaternion_z::Float32
 
-    time_us::Float32
+    time_us::UInt32
 end
 mutable struct SerializedVICON
     vicon::SerializedVICONcpp
@@ -72,7 +72,7 @@ function receive(sub::ZmqSubscriber, msg::SerializedVICON)
 end
 
 function subscribe(sub::ZmqSubscriber, msg::SerializedVICON)
-    @info "$(sub.name): Listening for SerializedVICON message, on: $(tcpstring(sub))"
+    @info "$(sub.name): Listening for SerializedVICON message, on: $(portstring(sub))"
 
     try
         while isopen(sub)
@@ -80,11 +80,11 @@ function subscribe(sub::ZmqSubscriber, msg::SerializedVICON)
             GC.gc(false)
             yield()
         end
-        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub)). Socket was closed."
+        @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket was closed."
     catch err
         sub.flags.diderror = true
         close(sub)
-        @warn "Shutting Down subscriber $(getname(sub)) on: $(tcpstring(sub))."
+        @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub))."
         @error err exception = (err, catch_backtrace())
     end
 
