@@ -15,7 +15,7 @@ struct SerializedVICONcpp
     quaternion_y::Float32
     quaternion_z::Float32
 
-    time_us::Float32
+    time_us::UInt32
 end
 mutable struct SerializedVICON
     vicon::SerializedVICONcpp
