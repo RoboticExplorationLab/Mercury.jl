@@ -50,7 +50,7 @@ function SerialSubscriber(
     local sp
     @catchserial(
         begin
-            sp = LibSerialPort.open(port_name, baudrate)
+            sp = LibSerialPort.open(port_name, baudrate; mode=)
             LibSerialPort.close(sp)
         end,
         "Failed to connect to serial port at: `$port_name`"
@@ -81,7 +81,12 @@ function read_packet(sub::SerialSubscriber)
             # local buffer one byte at a time until delim byte encoutered then return
             sub.read_buffer[i] = read(sub.serial_port, UInt8)
             if sub.read_buffer[i] == delim
-                return @view sub.read_buffer[max(1, i + 1 - MSG_BLOCK_SIZE):i]
+                ret_buf = @view sub.read_buffer[max(1, i + 1 - MSG_BLOCK_SIZE):i]
+                if length(ret_buf) > 2
+                    return ret_buf
+                else
+                    return @view UInt8[][:]
+                end
             end
         end
     end
@@ -177,7 +182,7 @@ function receive(
         end
 
         lock(write_lock)
-            decode!(buf, sub.buffer)
+        decode!(buf, sub.buffer)
         unlock(write_lock)
     end
 
