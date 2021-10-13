@@ -50,7 +50,7 @@ function SerialSubscriber(
     local sp
     @catchserial(
         begin
-            sp = LibSerialPort.open(port_name, baudrate; mode=)
+            sp = LibSerialPort.open(port_name, baudrate; mode=LibSerialPort.SP_MODE_READ)
             LibSerialPort.close(sp)
         end,
         "Failed to connect to serial port at: `$port_name`"
@@ -70,23 +70,34 @@ forceclose(sub::SerialSubscriber) = close(sub)
 function read_packet(sub::SerialSubscriber)
     delim = 0x00
     if isopen(sub) && (bytesavailable(sub.serial_port) > 0)
-        while (bytesavailable(sub.serial_port) > 0)
+        # byte_ref = Ref{UInt8}(0)
+        while bytesavailable(sub.serial_port) > 0
             if read(sub.serial_port, UInt8) == delim
                 break # Encountered end of previous packet
             end
+
+            # LibSerialPort.Lib.sp_nonblocking_read(sub.serial_port.ref, byte_ref, 1)
+            # if byte_ref.x == delim
+            #     break # Encountered end of previous packet
+            # end
         end
 
         for i = 1:length(sub.read_buffer)
             # Read one byte from LibSerialPort.SerialPort buffer into publishers
             # local buffer one byte at a time until delim byte encoutered then return
             sub.read_buffer[i] = read(sub.serial_port, UInt8)
+
+            # LibSerialPort.Lib.sp_nonblocking_read(sub.serial_port.ref, byte_ref, 1)
+            # sub.read_buffer[i] = byte_ref.x
+
             if sub.read_buffer[i] == delim
                 ret_buf = @view sub.read_buffer[max(1, i + 1 - MSG_BLOCK_SIZE):i]
-                if length(ret_buf) > 2
-                    return ret_buf
-                else
-                    return @view UInt8[][:]
+                if length(ret_buf) < 2
+                    ret_buf = @view UInt8[][:]
                 end
+                # LibSerialPort.sp_flush(sub.serial_port, LibSerialPort.SP_BUF_INPUT)
+
+                return ret_buf
             end
         end
     end
