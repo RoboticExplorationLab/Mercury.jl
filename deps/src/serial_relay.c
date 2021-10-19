@@ -21,6 +21,7 @@ typedef struct _serial_zmq_relay
 
 } serial_zmq_relay;
 
+
 // Open a serial port in read write mode and the associated ZMQ ports.
 // If any issue arises closes everything and returns a NULL pointer.
 void *open_relay(const char *port_name,
@@ -61,6 +62,8 @@ void *open_relay(const char *port_name,
         fprintf(stderr, "Failed to set serial port baudrate to %d!\n", baudrate);
         goto fail_set_baudrate;
     }
+    // // Record the size of the msg to be read from the buffer
+    // relay->msg_size = msg_size;
 
     // Setup the message buffers
     relay->msg_sub_buffer = (uint8_t *)calloc(PORT_BUFFER_SIZE, sizeof(uint8_t));
@@ -244,30 +247,17 @@ bool close_relay(void *relay)
     return _close_relay((serial_zmq_relay *)relay);
 }
 
-bool relay_launch(const char *port_name,
-                  int baudrate,
-                  // size_t msg_size,
-                  const char *sub_endpoint,
-                  const char *pub_endpoint)
+void _relay_launch(serial_zmq_relay *relay)
 {
-    // Build serial-ZMQ relay
-    void *relay = open_relay(port_name, baudrate, sub_endpoint, pub_endpoint);
-    // Check that open_relay worked properly
-    if (relay == NULL)
+    while (true)
     {
-        fprintf(stderr, "Failed to build serial-ZMQ relay!");
-        return false;
+        relay_read(relay);
+        relay_write(relay);
     }
-    else
-    {
-        // Loop through read and write to and from serial/ZMQ
-        while (true)
-        {
-            relay_read(relay);
-            relay_write(relay);
-        }
-        close_relay(relay);
-    }
+    close_relay(relay);
+}
 
-    return true;
+void relay_launch(void *relay)
+{
+    return _relay_launch((serial_zmq_relay *)relay);
 }

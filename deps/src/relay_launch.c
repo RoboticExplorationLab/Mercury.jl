@@ -25,11 +25,17 @@ int main(int argc, char **argv)
     sub_endpoint = argv[3];
     pub_endpoint = argv[4];
 
-    relay_launch(port_name,
-                 baudrate,
-                 //  msg_size,
-                 sub_endpoint,
-                 pub_endpoint);
+    void *relay = open_relay(port_name,
+                             baudrate,
+                             sub_endpoint,
+                             pub_endpoint);
+    if (relay == NULL)
+    {
+        fprintf(stderr, "Failed to initilaize Serial-ZMQ Relay!\n");
+        return 0;
+    }
+
+    relay_launch(relay);
 
     return 1;
 }
