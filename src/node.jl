@@ -279,17 +279,16 @@ function launch(node::Node)
         rate = getrate(node)
         lrl = LoopRateLimiter(rate)
 
+        # Launch the subscriber tasks asynchronously
+        start_subscribers(node)
+
         # Run any necessary startup
         startup(node)
 
         getflags(node).is_running[] = true
 
         @rate while !isnodedone(node)
-            # Check the subscribers for new messages
             compute(node)
-
-            # Check the subscribers for new messages
-            poll_subscribers(node)
 
             GC.gc(false)
             yield()
@@ -313,11 +312,10 @@ function launch(node::Node)
     getflags(node).is_running[] = false
 end
 
-function poll_subscribers(node::Node)
+function start_subscribers(node::Node)
+    nodeio = getIO(node)
+
     for submsg in nodeio.subs
-
-
-
         launchtask(submsg)
     end
 end
@@ -332,6 +330,13 @@ function closeall(node::Node)
     end
     for pubmsg in nodeio.pubs
         close(pubmsg.pub)
+    end
+    # Wait for async tasks to finish
+    for submsg in nodeio.subs
+        if !isempty(submsg.task)
+            wait(submsg.task[end])
+            pop!(submsg.task)
+        end
     end
 
     return nothing

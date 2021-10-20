@@ -16,6 +16,9 @@ Base.@kwdef mutable struct SubscriberFlags
 
     "# Of bytes of last message recieved"
     bytesrecieved::Int64 = 0
+
+    "Should the subscriber finish? Cleanest way to stop a subscriber task."
+    should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
 end
 
 abstract type Subscriber end
@@ -24,10 +27,9 @@ Base.isopen(sub::Subscriber)::Nothing =
     error("The `isopen` method hasn't been implemented for your Subscriber yet!")
 Base.close(sub::Subscriber)::Nothing =
     error("The `close` method hasn't been implemented for your Subscriber yet!")
-# TODO: probably should delete this
 forceclose(sub::Subscriber)::Nothing =
     error("The `forceclose` method hasn't been implemented for your Subscriber yet!")
-
+# Base.can_close(sub::Subscriber)::Nothing = error("The `can_close` method hasn't been implemented for your Subscriber yet!")
 getname(sub::Subscriber)::String = sub.name
 getflags(sub::Subscriber)::SubscriberFlags = sub.flags
 portstring(sub::Subscriber)::String = ""
@@ -35,20 +37,7 @@ portstring(sub::Subscriber)::String = ""
 # Keep track of newly recieved message
 bytesreceived(sub::Subscriber)::Int64 = getflags(sub).bytesrecieved
 has_new(sub::Subscriber)::Bool = getflags(sub).hasreceived
-
-"""
-Set the has received flag on subscriber to true
-"""
 function got_new!(sub::Subscriber)
-    flags = getflags(sub)
-    flags.hasreceived = true
-    return flags.hasreceived
-end
-
-"""
-Set the has received flag on subscriber to false
-"""
-function read_new!(sub::Subscriber)
     flags = getflags(sub)
     flags.hasreceived = false
     return flags.hasreceived
@@ -75,11 +64,41 @@ function decode!(buf::AbstractVector{UInt8}, bin_data::IOBuffer)
     return bytes_read
 end
 
-"""
-Receive function, is expected to return true if a message was received, false otherwise
-"""
-function receive(sub::Subscriber, buf, write_lock::ReentrantLock = ReentrantLock())::Bool
+function receive(sub::Subscriber, buf, write_lock::ReentrantLock = ReentrantLock())::Nothing
     error("The `receive` method hasn't been implemented for your Subscriber yet!")
+end
+
+function subscribe(sub::Subscriber, buf, write_lock::ReentrantLock)
+    @info "$(sub.name): Listening for message type: $(typeof(buf)), on: $(portstring(sub))"
+
+    try
+        while isopen(sub)
+            receive(sub, buf, write_lock)
+            GC.gc(false)
+            yield()
+            if getflags(sub).should_finish[]
+                break
+            end
+        end
+
+        if getflags(sub).should_finish[]
+            @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(portstring(sub))."
+        else
+            @debug "[subscribe loop] Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Socket was closed"
+        end
+        close(sub)
+    catch err
+        sub.flags.diderror = true
+        close(sub)
+        if !(err isa EOFError)  # catch the EOFError throw when force closing the socket
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Subscriber errored out."
+            rethrow(err)
+        else
+            @warn "Shutting Down subscriber $(getname(sub)) on: $(portstring(sub)). Force closing Subscriber."
+        end
+    end
+
+    return nothing
 end
 
 """
@@ -92,29 +111,35 @@ struct SubscribedMessage
     sub::Subscriber          # Note this is an abstract type
     lock::ReentrantLock
     name::String
+    task::Vector{Task}
 
     function SubscribedMessage(
-        msg::Union{ProtoBuf.ProtoType, AbstractVector{UInt8}},
+        msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
         sub::Subscriber;
         name = getname(sub),
     )
-        new(msg, sub, ReentrantLock(), name)
+        new(msg, sub, ReentrantLock(), name, Task[])
     end
 end
-
-function receive(submsg::SubscribedMessage)
-    # Check if we recieved a new message, if we do set has recieved flag to true
-    if (receive(submsg.sub, submsg.msg, submsg.lock))
-        got_new!(submsg.sub)
-    end
-end
-
+@inline subscribe(submsg::SubscribedMessage) =
+    subscribe(submsg.sub, submsg.msg, submsg.lock)
 @inline getname(submsg::SubscribedMessage) = submsg.name
 @inline getcomtype(submsg::SubscribedMessage) = getcomtype(submsg.sub)
+isrunning(submsg::SubscribedMessage) =
+    !isempty(submsg.task) && !istaskdone(submsg.task[end])
 
-# function Base.close(sub::SubscribedMessage)::Nothing
-#     error("The `close` method hasn't been implemented for your Subscriber yet!")
-# end
+# TODO: add a `close` method and modify the constructor to automatically create a subscriber
+
+function launchtask(submsg::SubscribedMessage)
+    push!(submsg.task, @async subscribe(submsg))
+    return submsg.task[end]
+end
+
+# NOTE: this won't work until the receive is non-blocking (upcoming PR)
+function stopsubscriber(submsg::SubscribedMessage)
+    getflags(submsg.sub).should_finish[] = true
+    wait(submsg.task[end])
+end
 
 function printstatus(sub::SubscribedMessage; indent = 0)
     prefix = " "^indent
@@ -147,6 +172,6 @@ function on_new(func::Function, submsg::SubscribedMessage)
             func(submsg.msg)
         end
 
-        read_new!(submsg.sub)
+        got_new!(submsg.sub)
     end
 end
