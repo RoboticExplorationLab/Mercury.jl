@@ -246,33 +246,30 @@ void _close_relay(serial_zmq_relay *relay)
     return;
 }
 
-bool close_relay(void *relay)
+void close_relay(void *relay)
 {
     return _close_relay((serial_zmq_relay *)relay);
 }
 
-void _relay_launch(serial_zmq_relay *relay)
+void relay_launch(const char *port_name,
+                  int baudrate,
+                  const char *sub_endpoint,
+                  const char *pub_endpoint)
 {
-    while (!relay->should_finish)
+    serial_zmq_relay *relay = open_relay(port_name, baudrate, sub_endpoint, pub_endpoint);
+    if (relay == NULL)
     {
-        relay_read(relay);
-        relay_write(relay);
+        fprintf(stderr, "Failed to initialize serial-zmq relay!");
+        return;
     }
-    close_relay(relay);
-}
-
-void relay_launch(void *relay)
-{
-    return _relay_launch((serial_zmq_relay *)relay);
-}
-
-void _stop_relay(serial_zmq_relay *relay)
-{
-    relay->should_finish = true;
-    return;
-}
-
-void stop_relay(void *relay)
-{
-    return _stop_relay((serial_zmq_relay *)relay);
+    else
+    {
+        while (!relay->should_finish)
+        {
+            relay_read(relay);
+            relay_write(relay);
+        }
+        close_relay(relay);
+        return;
+    }
 }

@@ -60,8 +60,6 @@ add_library(hg
     SHARED
     mercury.h
     mercury.c
-    serial_relay.h
-    serial_relay.c
 )
 # Link against zmq and libserialport (prefer private over public linking)
 target_link_libraries(hg
@@ -70,6 +68,22 @@ target_link_libraries(hg
     libzmq
 )
 target_include_directories(hg
+    PRIVATE
+    $<BUILD_INTERFACE:${libzmq_SOURCE_DIR}/include>
+)
+
+# Link against zmq and libserialport (prefer private over public linking)
+add_executable(relay_launch
+    serial_relay.h
+    serial_relay.c
+    relay_launch.c
+)
+target_link_libraries(relay_launch
+    PRIVATE
+    libserialport
+    libzmq
+)
+target_include_directories(relay_launch
     PRIVATE
     $<BUILD_INTERFACE:${libzmq_SOURCE_DIR}/include>
 )
