@@ -20,7 +20,7 @@ I/O mechanisms are added to a `NodeIO` object via [`add_publisher!`](@ref) and
 [`add_subscriber!`](@ref).
 """
 struct NodeIO
-    ctx::Union{Nothing,ZMQ.Context}
+    ctx::Union{Nothing, ZMQ.Context}
     pubs::Vector{PublishedMessage}
     subs::Vector{SubscribedMessage}
     opts::NodeOptions
@@ -77,7 +77,7 @@ Inside of `compute`:
 """
 function add_publisher!(
     nodeio::NodeIO,
-    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
+    msg::MercuryMessage,
     pub::Publisher,
 )
     push!(nodeio.pubs, PublishedMessage(msg, pub))
@@ -130,7 +130,7 @@ In `compute`:
 """
 function add_subscriber!(
     nodeio::NodeIO,
-    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
+    msg::MercuryMessage,
     sub::Subscriber,
 )
     push!(nodeio.subs, SubscribedMessage(msg, sub))
@@ -279,16 +279,17 @@ function launch(node::Node)
         rate = getrate(node)
         lrl = LoopRateLimiter(rate)
 
-        # Launch the subscriber tasks asynchronously
-        start_subscribers(node)
-
         # Run any necessary startup
         startup(node)
 
         getflags(node).is_running[] = true
 
         @rate while !isnodedone(node)
+            # Check the subscribers for new messages
             compute(node)
+
+            # Check the subscribers for new messages
+            poll_subscribers(node)
 
             GC.gc(false)
             yield()
@@ -312,11 +313,11 @@ function launch(node::Node)
     getflags(node).is_running[] = false
 end
 
-function start_subscribers(node::Node)
+function poll_subscribers(node::Node)
     nodeio = getIO(node)
 
     for submsg in nodeio.subs
-        launchtask(submsg)
+        recieve(submsg)
     end
 end
 
@@ -330,13 +331,6 @@ function closeall(node::Node)
     end
     for pubmsg in nodeio.pubs
         close(pubmsg.pub)
-    end
-    # Wait for async tasks to finish
-    for submsg in nodeio.subs
-        if !isempty(submsg.task)
-            wait(submsg.task[end])
-            pop!(submsg.task)
-        end
     end
 
     return nothing

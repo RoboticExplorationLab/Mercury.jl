@@ -109,7 +109,7 @@ function forceclose(sub::ZmqSubscriber)
     close(sub.socket)
 end
 
-function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantLock())
+function receive(sub::ZmqSubscriber, buf)
     did_receive = false
     sub.flags.isreceiving = true
     bin_data = sub.zmsg
@@ -145,10 +145,7 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
             sub.buffer.data[i] = bin_data[i]
         end
 
-        # Obtain the lock for the destination buffer and decode the message data
-        lock(write_lock)
         decode!(buf, sub.buffer)
-        unlock(write_lock)
     end
 
     return did_receive
