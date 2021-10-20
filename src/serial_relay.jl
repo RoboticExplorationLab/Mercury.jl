@@ -19,14 +19,17 @@ function launch_relay(port_name::String,
         return SERIAL_PORTS[port_name]
     end
 
-
     relay_exe = joinpath(dirname(pathof(Mercury)), "..", "deps", "build", "relay_launch")
+    cmd = `$relay_exe $port_name $baudrate $sub_endpoint $pub_endpoint`
 
-    # TODO: wrap in @async to capture stderr output?
-    serial_relay = run(`$relay_exe $port_name $baudrate $sub_endpoint $pub_endpoint`)
+    err = Pipe()
+    serial_relay = run(pipeline(cmd, stderr=err), wait=false)
+    close(err.in)
     sleep(1.0) # Wait for c constructor in relay_launch to either run successfully or fail
+
     if !process_running(serial_relay)
-        throw(SerialRelayError("Failed to setup Serial-ZMQ relay!"))
+        err_msg = String(read(err))
+        throw(SerialRelayError(err_msg))
     end
 
     SERIAL_PORTS[port_name] = serial_relay
@@ -48,13 +51,11 @@ function Base.close(serial_relay::SerialZmqRelay)
     end
 end
 
-function closeall(serial_relay::SerialZmqRelay)
-    if port_name in keys(SERIAL_PORTS)
+function closeall_relays()
+    for port_name in keys(SERIAL_PORTS)
         @info "Closing down Serial-ZMQ relay running on serialport: $port_name"
 
-        while process_running(SERIAL_PORTS[port_name])
-            kill(SERIAL_PORTS[port_name])
-        end
+        close(SERIAL_PORTS[port_name])
         delete!(SERIAL_PORTS, port_name)
     end
 end
