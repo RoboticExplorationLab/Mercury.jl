@@ -56,25 +56,6 @@ target_include_directories(libserialport
     ${LIBSP_INCLUDE_DIRS}
 )
 
-# Build the relay_launch executable
-add_executable(relay_launch
-    serial_relay.h
-    serial_relay.c
-    relay_launch.c
-)
-
-# Link against zmq and libserialport (prefer private over public linking)
-target_link_libraries(relay_launch
-    PRIVATE
-    libserialport
-    libzmq
-)
-target_include_directories(relay_launch
-    PRIVATE
-    $<BUILD_INTERFACE:${libzmq_SOURCE_DIR}/include>
-)
-
-
 add_library(hg
     SHARED
     mercury.h

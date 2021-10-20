@@ -18,6 +18,7 @@ const libhg = libhg_library_filename
 
 
 include("utils.jl")
+include("serial_relay.jl")
 include("rate_limiter.jl")
 
 include("publishers/abstract_publisher.jl")

@@ -13,6 +13,7 @@ void *open_relay(const char *port_name,
 void relay_read(void *relay);
 void relay_write(void *relay);
 
-bool close_relay(void *relay);
+void stop_relay(void *relay);
+void close_relay(void *relay);
 
 void relay_launch(void *relay);

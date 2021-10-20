@@ -19,6 +19,8 @@ typedef struct _serial_zmq_relay
     // Buffer used for recieving dumping serial port buffer into publisher
     uint8_t *msg_pub_buffer;
 
+    bool should_finish;
+
 } serial_zmq_relay;
 
 
@@ -133,6 +135,8 @@ void *open_relay(const char *port_name,
         goto fail_pub_bind;
     }
 
+    relay->should_finish = false;
+
     return relay;
 
 fail_pub_bind:
@@ -216,7 +220,7 @@ void relay_write(void *relay)
     return _relay_write((serial_zmq_relay *)relay);
 }
 
-bool _close_relay(serial_zmq_relay *relay)
+void _close_relay(serial_zmq_relay *relay)
 {
     // Result check int
     enum sp_return pc;
@@ -239,7 +243,7 @@ bool _close_relay(serial_zmq_relay *relay)
     assert(pc == SP_OK);
     sp_free_port(relay->port);
 
-    return true;
+    return;
 }
 
 bool close_relay(void *relay)
@@ -249,7 +253,7 @@ bool close_relay(void *relay)
 
 void _relay_launch(serial_zmq_relay *relay)
 {
-    while (true)
+    while (!relay->should_finish)
     {
         relay_read(relay);
         relay_write(relay);
@@ -260,4 +264,15 @@ void _relay_launch(serial_zmq_relay *relay)
 void relay_launch(void *relay)
 {
     return _relay_launch((serial_zmq_relay *)relay);
+}
+
+void _stop_relay(serial_zmq_relay *relay)
+{
+    relay->should_finish = true;
+    return;
+}
+
+void stop_relay(void *relay)
+{
+    return _stop_relay((serial_zmq_relay *)relay);
 }

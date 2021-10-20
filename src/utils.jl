@@ -88,27 +88,3 @@ macro catchserial(expr, errmsg)
 end
 
 tcpstring(ipaddr, port) = "tcp://" * string(ipaddr) * ":" * string(port)
-
-SERIAL_PORTS = Dict{String, Task}()
-
-function serial_relay_launch(port_name,
-                             baudrate,
-                            #  msg_size,
-                             sub_endpoint,
-                             pub_endpoint)
-
-    if port_name in keys(SERIAL_PORTS)
-        if istaskdone(SERIAL_PORTS[port_name])
-            delete!(SERIAL_PORTS, port_name)
-        else
-            return
-        end
-    end
-
-    proc = Threads.@spawn ccall((:relay_launch, libhg),
-                                UInt8,
-                                (Cstring, Cint, Cstring, Cstring),
-                                port_name, baudrate, sub_endpoint, pub_endpoint
-                                )
-    SERIAL_PORTS[port_name] = proc
-end
