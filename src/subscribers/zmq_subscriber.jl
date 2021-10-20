@@ -165,7 +165,7 @@ The function returns `true` if a message was received before `timeout` seconds h
 function publish_until_receive(
     pub::ZmqPublisher,
     sub::ZmqSubscriber,
-    msg_out::ProtoBuf.ProtoType,
+    msg_out::MercuryMessage,
     timeout = 1.0,  # seconds
 )
     @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"

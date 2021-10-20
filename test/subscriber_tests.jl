@@ -126,7 +126,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         pub_task = @async pub_message(pub)
         @test !istaskdone(pub_task)
         @test !istaskfailed(pub_task)
-        # do_publish[] = false 
+        # do_publish[] = false
         @test isopen(pub)
 
         @test isopen(sub)
@@ -210,7 +210,6 @@ end
     pubmsg = Hg.PublishedMessage(msg_out, pub)
 
     Hg.launchtask(submsg)
-    @test Hg.isrunning(submsg)
     @test !Hg.getflags(submsg.sub).hasreceived
     while (!Hg.getflags(submsg.sub).hasreceived)
         Hg.publish(pubmsg)
@@ -219,9 +218,7 @@ end
     @test Hg.getflags(submsg.sub).hasreceived
     @test isopen(sub)
     @test isopen(pub)
-    @test Hg.isrunning(submsg)
     Hg.forceclose(sub)
     close(pub)
     sleep(0.2)  # give a little bit of time to close the task
-    @test !Hg.isrunning(submsg)
 end

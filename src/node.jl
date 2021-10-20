@@ -199,10 +199,9 @@ getoptions(node::Node) = getIO(node).opts
 getflags(node::Node) = getIO(node).flags
 getrate(node::Node)::Float64 = getoptions(node).rate
 function isnodedone(node::Node)::Bool
-    nodeio = getIO(node)
-    all_running = all(isrunning.(nodeio.subs))
-    return getflags(node).should_finish[] || !all_running
+    return getflags(node).should_finish[]
 end
+
 function stopnode(node::Node; timeout = 1.0)
     getflags(node).should_finish[] = true
     t_start = time()

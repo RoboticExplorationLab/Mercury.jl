@@ -122,11 +122,9 @@ subtask = Threads.@spawn Hg.launch(subnode)
 
 ##
 sleep(1)
-@test Hg.isrunning(Hg.getsubscriber(subnode, 1))
 Hg.stopnode(node)     # closing publisher first should be fine
 Hg.stopnode(subnode)
 sleep(0.1)  # give some time for the tasks to finish
-@test !Hg.isrunning(Hg.getsubscriber(subnode, 1))
 @test !Hg.getflags(node).is_running[]
 @test !Hg.getflags(subnode).is_running[]
 
