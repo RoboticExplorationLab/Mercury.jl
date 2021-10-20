@@ -109,7 +109,7 @@ function forceclose(sub::ZmqSubscriber)
     close(sub.socket)
 end
 
-function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantLock())
+function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantLock())::Bool
     did_receive = false
     sub.flags.isreceiving = true
     bin_data = sub.zmsg

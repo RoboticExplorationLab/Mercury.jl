@@ -1,84 +1,60 @@
 # Interface
-const SerialZmqRelay = Ptr{Cvoid}
 
-mutable struct SerialRelay
-    relay::SerialZmqRelay
-    port_name::String
-
-    write_ip_port::String
-    read_ip_port::String
-
-    open::Bool
-end
+const SerialZmqRelay = Base.Process
 
 struct SerialRelayError <: Exception
     msg::String
 end
 
-SERIAL_PORTS = Dict{String, SerialRelay}()
+SERIAL_PORTS = Dict{String, SerialZmqRelay}()
 
-Base.isopen(serial_relay::SerialRelay) = serial_relay.open
+function launch_relay(port_name::String,
+                      baudrate::Int64,
+                      sub_endpoint::String,
+                      pub_endpoint::String
+                      )::SerialZmqRelay
 
-function Base.close(serial_relay::SerialRelay)
-    if isopen(serial_relay)
-        @info "Closing Serial-ZMQ relay on port: $(serial_relay.port_name)."
-        # ccall((:stop_relay, libhg),
-        #       Cvoid,
-        #       (SerialZmqRelay, ),
-        #       serial_relay.relay)
-
-        ccall((:close_relay, libhg),
-              Cvoid,
-              (SerialZmqRelay, ),
-              serial_relay.relay)
+    if port_name in keys(SERIAL_PORTS) && process_running(SERIAL_PORTS[port_name])
+        @info "Serial port: $(port_name), already has associate ZMQ relay running!"
+        return SERIAL_PORTS[port_name]
     end
-    serial_relay.open = false
 
-    return
+
+    relay_exe = joinpath(dirname(pathof(Mercury)), "..", "deps", "build", "relay_launch")
+
+    # TODO: wrap in @async to capture stderr output?
+    serial_relay = run(`$relay_exe $port_name $baudrate $sub_endpoint $pub_endpoint`)
+    sleep(1.0) # Wait for c constructor in relay_launch to either run successfully or fail
+    if !process_running(serial_relay)
+        throw(SerialRelayError("Failed to setup Serial-ZMQ relay!"))
+    end
+
+    SERIAL_PORTS[port_name] = serial_relay
+    return serial_relay
 end
 
-function open_relay(port_name,
-                    baudrate,
-                    sub_endpoint,
-                    pub_endpoint)::SerialRelay
-    relay = C_NULL
-    local err_msg
-
-    mktemp() do path, io
-        # Capture the stderr
-        redirect_stderr(io) do
-            relay = ccall((:open_relay, libhg),
-                          SerialZmqRelay,
-                          (Cstring, Cint, Cstring, Cstring),
-                          port_name, baudrate, sub_endpoint, pub_endpoint
-                          )
+function check_relays()
+    if port_name in keys(SERIAL_PORTS)
+        if !process_running(SERIAL_PORTS[port_name])
+            @warn "Serial-ZMQ relay running on serialport: $port_name has stopped running!"
+            delete!(SERIAL_PORTS, port_name)
         end
-        # Write std_err msg to err_msg variable
-        flush(io)
-        err_msg = read(path, String)
     end
-
-    if relay == C_NULL
-        @error SerialRelayError(err_msg)
-    end
-
-    return SerialRelay(relay, port_name, sub_endpoint, pub_endpoint, true)
 end
 
-function relay_launch(serial_relay::SerialRelay)
-    if serial_relay.port_name in keys(SERIAL_PORTS)
-        if isopen(SERIAL_PORTS[serial_relay.port_name])
-            delete!(SERIAL_PORTS, serial_relay.port_name)
-        else
-            @info "Serial port: $(serial_relay.port_name), already has associate ZMQ relay running!"
-            return
-        end
+function Base.close(serial_relay::SerialZmqRelay)
+    if process_running(serial_relay) # true
+        kill(serial_relay)
     end
+end
 
-    proc = Threads.@spawn ccall((:relay_launch, libhg),
-                                Cvoid,
-                                (SerialZmqRelay, ),
-                                serial_relay.relay
-                                )
-    SERIAL_PORTS[serial_relay.port_name] = serial_relay
+function closeall(serial_relay::SerialZmqRelay)
+    if port_name in keys(SERIAL_PORTS)
+        @info "Closing down Serial-ZMQ relay running on serialport: $port_name"
+
+        while process_running(SERIAL_PORTS[port_name])
+            kill(SERIAL_PORTS[port_name])
+        end
+        delete!(SERIAL_PORTS, port_name)
+    end
 end
