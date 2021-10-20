@@ -22,11 +22,9 @@ include("serial_relay.jl")
 include("rate_limiter.jl")
 
 include("publishers/abstract_publisher.jl")
-include("publishers/serial_publisher.jl")
 include("publishers/zmq_publisher.jl")
 
 include("subscribers/abstract_subscriber.jl")
-include("subscribers/serial_subscriber.jl")
 include("subscribers/zmq_subscriber.jl")
 include("subscribers/subscribed_vicon.jl")
 
