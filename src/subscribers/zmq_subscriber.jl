@@ -62,7 +62,7 @@ struct ZmqSubscriber <: Subscriber
         )
         @catchzmq(
             ZMQ.connect(socket, "tcp://$ipaddr:$port"),
-            "Could not connect subscriber $name to port $(portstring(ipaddr, port))."
+            "Could not connect subscriber $name to port $(tcpstring(ipaddr, port))."
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
@@ -92,14 +92,14 @@ end
 
 getcomtype(::ZmqSubscriber) = :zmq
 function Base.isopen(sub::ZmqSubscriber)
-    return lock(() -> isopen(sub.socket), sub.socket_lock)
+    return lock(() -> ZMQ.isopen(sub.socket), sub.socket_lock)
 end
 
 function Base.close(sub::ZmqSubscriber)
     lock(sub.socket_lock) do
         if isopen(sub.socket)
             @debug "Closing ZmqSubscriber: $(getname(sub))"
-            close(sub.socket)
+            ZMQ.close(sub.socket)
         end
     end
 end
@@ -111,18 +111,18 @@ end
 
 function receive(sub::ZmqSubscriber, buf)
     did_receive = false
-    sub.flags.isreceiving = true
+    getflags(sub).isreceiving = true
     bin_data = sub.zmsg
 
     bytes_read = Int32(0)
     if isopen(sub)
         bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)::Int32
-        sub.flags.bytesrecieved = bytes_read
+        getflags(sub).bytesrecieved = bytes_read
 
         if bytes_read == -1
             ZMQ.zmq_errno() == ZMQ.EAGAIN || throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
         else
-            sub.flags.hasreceived = true
+            getflags(sub).hasreceived = true
             did_receive = true
         end
 
@@ -138,12 +138,11 @@ function receive(sub::ZmqSubscriber, buf)
     end
 
     # Copy the data to the local buffer and decode
+
     if did_receive
         seek(sub.buffer, 0)
+        copyto!(msg, 1, pub.buffer.data, 1, bytes_read)
         sub.buffer.size = bytes_read
-        for i = 1:bytes_read
-            sub.buffer.data[i] = bin_data[i]
-        end
 
         decode!(buf, sub.buffer)
     end

@@ -7,7 +7,7 @@ enable_testing()
 ########################################
 # Download dependencies
 ########################################
-
+include(ExternalProject)  # pull in the `ExternalProject` CMake module
 include(FetchContent)  # pull in the `FetchContent` CMake module
 
 # Download libzmq into `build/_deps
@@ -37,18 +37,45 @@ target_include_directories(libzmq
     $<BUILD_INTERFACE:${libzmq_SOURCE_DIR}/include>
 )
 
-# Find the libserialport package installed on the computer
-find_package(PkgConfig)  # includes the `PkgConfig` CMake module
-pkg_check_modules(LIBSP libserialport)  # searches the computer for the libserialport package
+# SETUP FOR LibSerialPort Install
+set(libserialport_SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/libserialport-src")
+set(libserialport_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/libserialport-build")
+if(NOT EXISTS libserialport_SOURCE_DIR)
+    make_directory(${libserialport_SOURCE_DIR})
+endif()
+if(NOT EXISTS libserialport_BINARY_DIR)
+    make_directory(${libserialport_BINARY_DIR})
+endif()
+
+
+# message(STATUS "foo include dir: ${libzmq_SOURCE_DIR}")
+# message(STATUS "foo include dir: ${libzmq_BINARY_DIR}")
+# message(STATUS "foo include dir: ${CMAKE_CURRENT_BINARY_DIR}")
+
+
+ExternalProject_Add(libserialport
+    PREFIX "${CMAKE_CURRENT_BINARY_DIR}/_deps"
+    GIT_REPOSITORY "git://sigrok.org/libserialport"
+    GIT_TAG "348a6d353af8ac142f68fbf9fe0f4d070448d945"
+    SOURCE_DIR ${libzmq_SOURCE_DIR}
+    BINARY_DIR ${libzmq_BINARY_DIR}
+    CMAKE_CACHE_ARGS
+        -DFOO_ENABLE_BAR:BOOL=1
+    INSTALL_COMMAND "./autogen.sh && ./configure && make"
+)
+
+# # Find the libserialport package installed on the computer
+# find_package(PkgConfig)  # includes the `PkgConfig` CMake module
+# pkg_check_modules(LIBSP libserialport)  # searches the computer for the libserialport package
 
 # Creates an interface target with the info from the previous command
-add_library(libserialport INTERFACE)
+# add_library(libserialport INTERFACE)
 
-# Link the libserial port libraries so that any target linking this also links against the libserialport libraries
-target_link_libraries(libserialport
-    INTERFACE
-    ${LIBSP_LINK_LIBRARIES}
-)
+# # Link the libserial port libraries so that any target linking this also links against the libserialport libraries
+# target_link_libraries(libserialport
+#     INTERFACE
+#     ${LIBSP_LINK_LIBRARIES}
+# )
 
 # Add the libserialport header directory so that any target linking this also includes the header files
 target_include_directories(libserialport

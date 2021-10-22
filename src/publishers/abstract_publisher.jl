@@ -1,9 +1,12 @@
 Base.@kwdef mutable struct PublisherFlags
-    has_published::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
+    "Is the publisher currently sending data"
+    has_published::Bool = false
 
-    "Should the publisher finish? Cleanest way to stop a publisher task."
-    "Specifically useful for stopping publishing in a different thread"
-    should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
+    "Did the publisher exit with an error"
+    diderror::Bool = false
+
+    "# Of bytes of last message sent"
+    bytespublished::Int64 = 0
 end
 
 abstract type Publisher end
@@ -12,10 +15,11 @@ Base.isopen(sub::Publisher)::Nothing =
     error("The `isopen` method hasn't been implemented for your Publisher yet!")
 Base.close(sub::Publisher)::Nothing =
     error("The `close` method hasn't been implemented for your Publisher yet!")
-getname(pub::Publisher)::String = pub.name
-getflags(pub::Publisher)::PublisherFlags = pub.flags
+@inline getname(pub::Publisher)::String = pub.name
+@inline getflags(pub::Publisher)::PublisherFlags = pub.flags
+portstring(sub::Publisher)::String = ""
 
-function publish(pub::Publisher, proto_msg::ProtoBuf.ProtoType)::Nothing
+function publish(pub::Publisher, msg::MercuryMessage)::Nothing
     throw(
         MercuryException(
             "The `publish` method hasn't been implemented for your Publisher yet!",
