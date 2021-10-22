@@ -19,6 +19,23 @@ Base.close(sub::Publisher)::Nothing =
 @inline getflags(pub::Publisher)::PublisherFlags = pub.flags
 portstring(sub::Publisher)::String = ""
 
+
+"""
+Write out the byte data into the message container buf. Returns the number of bytes written
+"""
+function encode!(buf::ProtoBuf.ProtoType, bin_data::IOBuffer, )
+    bytes_written = ProtoBuf.writeproto(bin_data, buf)
+
+    return bytes_written
+end
+
+function encode!(buf::AbstractVector{UInt8}, bin_data::IOBuffer, )
+    bytes_written = min(length(buf), bin_data.size)
+    copyto!(bin_data.data, 1, buf, 1, bytes_written)
+
+    return bytes_written
+end
+
 function publish(pub::Publisher, msg::MercuryMessage)::Nothing
     throw(
         MercuryException(

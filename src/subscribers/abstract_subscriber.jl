@@ -54,7 +54,6 @@ function read_new!(sub::Subscriber)
     return flags.hasreceived
 end
 
-
 """
 Read in the byte data into the message container buf. Returns the number of bytes read
 """
@@ -67,10 +66,7 @@ end
 
 function decode!(buf::AbstractVector{UInt8}, bin_data::IOBuffer)
     bytes_read = min(length(buf), bin_data.size)
-
-    for i = 1:bytes_read
-        buf[i] = bin_data.data[i]
-    end
+    copyto!(buf, 1, bin_data.data, 1, bytes_read)
 
     return bytes_read
 end
@@ -79,7 +75,11 @@ end
 Receive function, is expected to return true if a message was received, false otherwise
 """
 function receive(sub::Subscriber, buf::MercuryMessage)::Bool
-    error("The `receive` method hasn't been implemented for your Subscriber yet!")
+    throw(
+        MercuryException(
+            "The `receive` method hasn't been implemented for your Subscriber yet!",
+        ),
+    )
 end
 
 """

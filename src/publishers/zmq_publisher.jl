@@ -29,9 +29,8 @@ struct ZmqPublisher <: Publisher
     ipaddr::Sockets.IPv4
     buffer::IOBuffer
     name::String
-    flags::PublisherFlags
     socket_lock::ReentrantLock
-    zmsg::ZMQ.Message
+    flags::PublisherFlags
 
     function ZmqPublisher(
         ctx::ZMQ.Context,
@@ -55,11 +54,10 @@ struct ZmqPublisher <: Publisher
             socket,
             port,
             ipaddr,
-            IOBuffer(zeros(UInt8, buffersize)),
+            IOBuffer(zeros(UInt8, buffersize); read=true, write=true),
             name,
             ReentrantLock(),
             PublisherFlags(),
-            ZMQ.Message(),
             )
     end
 end
@@ -81,7 +79,7 @@ function Base.isopen(pub::ZmqPublisher)
 end
 
 function Base.close(pub::ZmqPublisher)
-    lock(sub.socket_lock) do
+    lock(pub.socket_lock) do
         if isopen(pub.socket)
             @debug "Closing ZmqPublisher: $(getname(pub))"
             ZMQ.close(pub.socket)
@@ -94,53 +92,28 @@ function forceclose(pub::ZmqPublisher)
     close(pub.socket)
 end
 
-function publish(pub::ZmqPublisher, proto_msg::ProtoBuf.ProtoType)
+function publish(pub::ZmqPublisher, msg::MercuryMessage)
     pub.flags.has_published = false
 
     bytes_sent = Int32(0)
     if isopen(pub)
         # Encode the message with protobuf
-        msg_size = ProtoBuf.writeproto(pub.buffer, proto_msg)
+        msg_size = encode!(msg, pub.buffer)
         getflags(pub).bytespublished = msg_size
 
         # Create a new message to be sent and copy the encoded protobuf bytes
-        msg = ZMQ.Message(msg_size)
-        copyto!(msg, 1, pub.buffer.data, 1, msg_size)
+        zmsg = ZMQ.Message(msg_size)
+        copyto!(zmsg, 1, pub.buffer.data, 1, msg_size)
 
         # Send over ZMQ
         # NOTE: ZMQ will de-allocate the message allocated above, so garbage
         # collection should not be an issue here
-        ZMQ.send(pub.socket, msg)
+        ZMQ.send(pub.socket, zmsg)
         getflags(pub).has_published = true
 
         # Move to the beginning of the buffer
         seek(pub.buffer, 0)
     end
-end
-
-function publish(pub::ZmqPublisher, proto_msg::MercuryMessage)
-    getflags(pub).has_published = false
-    did_publish = false
-
-    if isopen(pub)
-        # Encode the message with protobuf
-        msg_size = ProtoBuf.writeproto(pub.buffer, proto_msg)
-
-        # Create a new message to be sent and copy the encoded protobuf bytes
-        msg = ZMQ.Message(msg_size)
-        seek(pub.buffer, 0)
-        copyto!(msg, 1, pub.buffer.data, 1, msg_size)
-        pub.buffer.size = bytes_read
-
-        # Send over ZMQ
-        # NOTE: ZMQ will de-allocate the message allocated above, so garbage
-        # collection should not be an issue here
-        ZMQ.send(pub.socket, msg)
-        getflags(pub).has_published = true
-        did_publish = true
-    end
-
-    return did_publish
 end
 
 portstring(pub::ZmqPublisher) = tcpstring(pub.ipaddr, pub.port)

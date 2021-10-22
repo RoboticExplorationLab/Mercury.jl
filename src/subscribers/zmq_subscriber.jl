@@ -109,7 +109,7 @@ function forceclose(sub::ZmqSubscriber)
     close(sub.socket)
 end
 
-function receive(sub::ZmqSubscriber, buf)
+function receive(sub::ZmqSubscriber, msg::MercuryMessage)
     did_receive = false
     getflags(sub).isreceiving = true
     bin_data = sub.zmsg
@@ -141,10 +141,10 @@ function receive(sub::ZmqSubscriber, buf)
 
     if did_receive
         seek(sub.buffer, 0)
-        copyto!(msg, 1, pub.buffer.data, 1, bytes_read)
+        copyto!(pub.buffer.data, 1, bin_data, 1, bytes_read)
         sub.buffer.size = bytes_read
 
-        decode!(buf, sub.buffer)
+        decode!(msg, sub.buffer)
     end
 
     return did_receive
