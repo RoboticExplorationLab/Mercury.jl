@@ -61,5 +61,6 @@ end
         msg = TestMsg(x = 10, y = 11, z = 12)
         pubmsg = Hg.PublishedMessage(msg, pub, name = "TestPub")
         @test Hg.getname(pubmsg) == "TestPub"
+        close(pub)
     end
 end

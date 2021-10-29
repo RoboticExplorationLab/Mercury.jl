@@ -6,13 +6,14 @@ struct SerialRelayError <: Exception
     msg::String
 end
 
-SERIAL_PORTS = Dict{String, SerialZmqRelay}()
+SERIAL_PORTS = Dict{String,SerialZmqRelay}()
 
-function launch_relay(port_name::String,
-                      baudrate::Int64,
-                      sub_endpoint::String,
-                      pub_endpoint::String
-                      )::SerialZmqRelay
+function launch_relay(
+    port_name::String,
+    baudrate::Int64,
+    sub_endpoint::String,
+    pub_endpoint::String,
+)::SerialZmqRelay
 
     if port_name in keys(SERIAL_PORTS) && process_running(SERIAL_PORTS[port_name])
         @info "Serial port: $(port_name), already has associate ZMQ relay running!"
@@ -23,7 +24,7 @@ function launch_relay(port_name::String,
     cmd = `$relay_exe $port_name $baudrate $sub_endpoint $pub_endpoint`
 
     err = Pipe()
-    serial_relay = run(pipeline(cmd, stderr=err), wait=false)
+    serial_relay = run(pipeline(cmd, stderr = err), wait = false)
     close(err.in)
     sleep(1.0) # Wait for c constructor in relay_launch to either run successfully or fail
 

@@ -89,16 +89,16 @@ end
     lrl = LoopRateLimiter(rate)
     @test Hg.doesblock(lrl)
     error = (rate - median(runrate(mykernel, lrl, test_time))) / rate * 100
-    @test error < 5  # less than 5% error
+    @test error < 10  # less than 5% error
 
     error = (rate - runrate_macro1(mykernel, Val(rate), test_time)) / rate * 100
-    @test error < 5  # less than 5% error
+    @test error < 10  # less than 5% error
     error = (rate - runrate_macro2(mykernel, rate, test_time)) / rate * 100
-    @test error < 5  # less than 5% error
+    @test error < 10  # less than 5% error
     error = (rate - runrate_macro3(mykernel, Val(rate), test_time)) / rate * 100
-    @test error < 5  # less than 5% error
+    @test error < 10  # less than 5% error
     error = (rate - runrate_macro4(mykernel, rate, test_time)) / rate * 100
-    @test error < 5  # less than 5% error
+    @test error < 10  # less than 5% error
 
     rate = 40
     test_time = 0.1 # sec

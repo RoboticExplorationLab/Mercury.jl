@@ -178,7 +178,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         sleep(0.5)
         Hg.receive(sub, msg)
         second_rec = msg.x
-        @test second_rec > first_rec + 10
+        @test second_rec > first_rec + 5
 
         do_publish = false
         sleep(0.1)
