@@ -141,7 +141,7 @@ function receive(sub::ZmqSubscriber, msg::MercuryMessage)
 
     if did_receive
         seek(sub.buffer, 0)
-        copyto!(pub.buffer.data, 1, bin_data, 1, bytes_read)
+        copyto!(sub.buffer.data, 1, bin_data, 1, bytes_read)
         sub.buffer.size = bytes_read
 
         decode!(msg, sub.buffer)
@@ -165,6 +165,7 @@ function publish_until_receive(
     pub::ZmqPublisher,
     sub::ZmqSubscriber,
     msg_out::MercuryMessage,
+    msg_in::MercuryMessage,
     timeout = 1.0,  # seconds
 )
     @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"
@@ -175,6 +176,7 @@ function publish_until_receive(
     while (time() - t_start < timeout)
         publish(pub, msg_out)
         sleep(0.001)
+        receive(sub, msg_in)
         if sub.flags.hasreceived
             return true
         end

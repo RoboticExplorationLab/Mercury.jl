@@ -70,11 +70,11 @@ function Hg.compute(node::SubNode)
     y = node.test_msg.y
     z = node.test_msg.z
     submsg = Hg.getIO(node).subs[1]
-    lock(submsg.lock) do
-        x = node.test_msg.x
-        y = node.test_msg.y
-        z = node.test_msg.z
-    end
+
+    x = node.test_msg.x
+    y = node.test_msg.y
+    z = node.test_msg.z
+
     println("Received x = $x")
 end
 
@@ -138,9 +138,6 @@ pub = Hg.getpublisher(node, 1)
 @test !isopen(pub.pub)
 sub = Hg.getsubscriber(subnode, 1)
 @test !isopen(sub.sub)
-for submsg in subnode.nodeio.subs
-    @test isempty(submsg.task)
-end
 
 dx = node.test_msg.x - subnode.test_msg.x
 dy = node.test_msg.y - subnode.test_msg.y

@@ -316,7 +316,7 @@ function poll_subscribers(node::Node)
     nodeio = getIO(node)
 
     for submsg in nodeio.subs
-        recieve(submsg)
+        receive(submsg)
     end
 end
 

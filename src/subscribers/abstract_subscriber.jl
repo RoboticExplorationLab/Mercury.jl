@@ -118,8 +118,6 @@ function printstatus(sub::SubscribedMessage; indent = 0)
     println(prefix, "Subscriber: ", getname(sub))
     println(prefix, "  Type: ", getcomtype(sub))
     println(prefix, "  Message Type: ", typeof(sub.msg))
-    println(prefix, "  Is running? ", !isempty(sub.task) && !istaskdone(sub.task[end]))
-    println(prefix, "  Is failed? ", !isempty(sub.task) && istaskfailed(sub.task[end]))
     println(prefix, "  Has received? ", getflags(sub.sub).hasreceived)
     println(prefix, "  Is Open? ", isopen(sub.sub))
 end

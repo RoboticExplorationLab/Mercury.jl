@@ -63,7 +63,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         i = 1
         for i = 1:100
             Hg.publish(pub, msg_out)
-            if Hg.receive(sub, msg, ReentrantLock())
+            if Hg.receive(sub, msg)
                 break
             end
         end
@@ -81,19 +81,14 @@ ENV["JULIA_DEBUG"] = "Mercury"
     @testset "Closing" begin
         sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
         pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
-        msg = TestMsg(x = 10, y = 11, z = 12)
+        msg_in = TestMsg(x = 10, y = 11, z = 12)
         msg_out = TestMsg(x = 1, y = 2, z = 3)
 
         # Close the task by waiting for a receive
-        sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
-        schedule(sub_task)
         cnt = 0
         timeout = 5.0 # seconds
-        @test Hg.publish_until_receive(pub, sub, msg_out, timeout)
-        @test !istaskdone(sub_task)
-        # sleep(1.0)
-        @show sub.flags.hasreceived
-        @test msg.x == msg_out.x
+        @test Hg.publish_until_receive(pub, sub, msg_out, msg_in, timeout)
+        @test msg_in.x == msg_out.x
 
         # Should be able to close at any time
         close(sub)
@@ -130,18 +125,17 @@ ENV["JULIA_DEBUG"] = "Mercury"
         @test isopen(pub)
 
         @test isopen(sub)
-        recv_lock = ReentrantLock()
 
         # Retrieve 2 messages to make sure the publisher is working
-        Hg.receive(sub, msg, recv_lock)
+        Hg.receive(sub, msg)
         x_prev = msg.x
         sleep(1.0)
-        Hg.receive(sub, msg, recv_lock)
+        Hg.receive(sub, msg)
         x_new = msg.x
         @test x_new - x_prev > 200
 
         # Benchmark the receive
-        b = @benchmark Hg.receive($sub, $msg, $recv_lock)
+        b = @benchmark Hg.receive($sub, $msg)
         @test maximum(b.gctimes) == 0  # no garbage collection
         @test b.memory == 0            # no dynamic memory allocations
 
@@ -209,11 +203,11 @@ end
     submsg = Hg.SubscribedMessage(msg, sub)
     pubmsg = Hg.PublishedMessage(msg_out, pub)
 
-    Hg.launchtask(submsg)
     @test !Hg.getflags(submsg.sub).hasreceived
     while (!Hg.getflags(submsg.sub).hasreceived)
         Hg.publish(pubmsg)
         sleep(0.001)
+        Hg.receive(submsg)
     end
     @test Hg.getflags(submsg.sub).hasreceived
     @test isopen(sub)

@@ -20,10 +20,6 @@ target_link_libraries(relay_launch
         libserialport
         libzmq
 )
-add_dependencies(relay_launch
-    libserialport
-    libzmq
-)
 
 
 # build the Mercury library
