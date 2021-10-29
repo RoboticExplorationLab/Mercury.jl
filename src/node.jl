@@ -20,7 +20,7 @@ I/O mechanisms are added to a `NodeIO` object via [`add_publisher!`](@ref) and
 [`add_subscriber!`](@ref).
 """
 struct NodeIO
-    ctx::Union{Nothing, ZMQ.Context}
+    ctx::Union{Nothing,ZMQ.Context}
     pubs::Vector{PublishedMessage}
     subs::Vector{SubscribedMessage}
     opts::NodeOptions
@@ -75,11 +75,7 @@ Inside of `compute`:
     ...
 
 """
-function add_publisher!(
-    nodeio::NodeIO,
-    msg::MercuryMessage,
-    pub::Publisher,
-)
+function add_publisher!(nodeio::NodeIO, msg::MercuryMessage, pub::Publisher)
     push!(nodeio.pubs, PublishedMessage(msg, pub))
 end
 
@@ -128,11 +124,7 @@ In `compute`:
     # use node.local_test_msg in the rest of the code
     ...
 """
-function add_subscriber!(
-    nodeio::NodeIO,
-    msg::MercuryMessage,
-    sub::Subscriber,
-)
+function add_subscriber!(nodeio::NodeIO, msg::MercuryMessage, sub::Subscriber)
     push!(nodeio.subs, SubscribedMessage(msg, sub))
 end
 

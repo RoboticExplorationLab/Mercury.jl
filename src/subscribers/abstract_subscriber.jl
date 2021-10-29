@@ -92,11 +92,7 @@ struct SubscribedMessage
     sub::Subscriber          # Note this is an abstract type
     name::String
 
-    function SubscribedMessage(
-        msg::MercuryMessage,
-        sub::Subscriber;
-        name = getname(sub),
-    )
+    function SubscribedMessage(msg::MercuryMessage, sub::Subscriber; name = getname(sub))
         new(msg, sub, name)
     end
 end

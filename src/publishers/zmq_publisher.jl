@@ -54,11 +54,11 @@ struct ZmqPublisher <: Publisher
             socket,
             port,
             ipaddr,
-            IOBuffer(zeros(UInt8, buffersize); read=true, write=true),
+            IOBuffer(zeros(UInt8, buffersize); read = true, write = true),
             name,
             ReentrantLock(),
             PublisherFlags(),
-            )
+        )
     end
 end
 

@@ -1,6 +1,6 @@
 ZMQ_CONFLATE = 54
 
-const MercuryMessage = Union{ProtoBuf.ProtoType, AbstractVector{UInt8}}
+const MercuryMessage = Union{ProtoBuf.ProtoType,AbstractVector{UInt8}}
 
 struct MercuryException <: Exception
     msg::String
