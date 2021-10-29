@@ -2,7 +2,7 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - master
     tags: '*'
   pull_request:
 jobs:
@@ -20,6 +20,14 @@ jobs:
         arch:
           - x64
     steps:
+      - name: Installing automake tools
+        if: ${{ matrix.os == 'macOS-latest' }}
+        run: brew install automake
+
+      - name: Installing asciidoctor
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: sudo apt-get install asciidoctor
+
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@latest
         with:
