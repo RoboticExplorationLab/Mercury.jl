@@ -126,7 +126,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         pub_task = @async pub_message(pub)
         @test !istaskdone(pub_task)
         @test !istaskfailed(pub_task)
-        # do_publish[] = false 
+        # do_publish[] = false
         @test isopen(pub)
 
         @test isopen(sub)
@@ -184,7 +184,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         sleep(0.5)
         Hg.receive(sub, msg)
         second_rec = msg.x
-        @test second_rec > first_rec + 10
+        @test second_rec > first_rec + 5
 
         do_publish = false
         sleep(0.1)
