@@ -1,5 +1,4 @@
 # Interface
-
 const SerialZmqRelay = Base.Process
 
 struct SerialRelayError <: Exception
@@ -60,3 +59,6 @@ function closeall_relays()
         delete!(SERIAL_PORTS, port_name)
     end
 end
+
+# Make sure all processes are cleaned up
+Base.atexit(closeall_relays)
