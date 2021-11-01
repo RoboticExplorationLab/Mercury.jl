@@ -5,6 +5,20 @@
 #include <libserialport.h>
 #include <zmq.h>
 
+#define DEBUG 1
+
+enum sr_return
+{
+    /** Operation completed successfully. */
+    SR_OK = 0,
+    /** Invalid arguments were passed to the function. */
+    SR_ERR_SP = -1,
+    /** A system error occurred while executing the operation. */
+    SR_ERR_ZMQ = -2,
+    /** A memory allocation failed while executing the operation. */
+    SR_ERR_MEM = -3,
+};
+
 void *open_relay(const char *port_name,
                  int baudrate,
                  const char *sub_endpoint,

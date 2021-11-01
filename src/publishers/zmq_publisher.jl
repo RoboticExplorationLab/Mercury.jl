@@ -92,7 +92,11 @@ function publish(pub::ZmqPublisher, proto_msg::ProtoBuf.ProtoType)
 
         # Move to the beginning of the buffer
         seek(pub.buffer, 0)
+
+        return msg_size
     end
+
+    return 0
 end
 
 tcpstring(pub::ZmqPublisher) = "tcp://" * string(pub.ipaddr) * ":" * string(pub.port)

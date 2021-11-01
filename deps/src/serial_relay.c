@@ -3,6 +3,13 @@
 
 #define PORT_BUFFER_SIZE 1024
 
+#define debug_print(fmt, ...)                  \
+    do                                         \
+    {                                          \
+        if (DEBUG)                             \
+            fprintf(stderr, fmt, __VA_ARGS__); \
+    } while (0)
+
 typedef struct _serial_zmq_relay
 {
     // Setup port struct
@@ -52,7 +59,7 @@ void *open_relay(const char *port_name,
         fprintf(stderr, "Failed to find serial port by name %s!\n", port_name);
         goto fail_port_name;
     }
-    pc = sp_open(relay->port, SP_MODE_READ);
+    pc = sp_open(relay->port, SP_MODE_READ_WRITE);
     if (pc != SP_OK)
     {
         fprintf(stderr, "Failed to open serial port %s!\n", port_name);
@@ -170,20 +177,23 @@ void _relay_read(serial_zmq_relay *relay)
 
     // Check how many bytes are avalible from the serial port and read them in
     int bytes_waiting = sp_input_waiting(relay->port);
+
     if (bytes_waiting > 0)
     {
+        debug_print("Reading from the serial port %p\n", relay->port);
+
         pc = sp_blocking_read(relay->port,
                               (void *)relay->msg_pub_buffer,
                               bytes_waiting,
                               (unsigned int)1000);
-        assert(pc == bytes_waiting);
+        debug_print("Read %d bytes from the serial port\n", pc);
+        // debug_print("%.*s", bytes_waiting, relay->msg_pub_buffer);
 
         // Relay those bytes through zmq
         rc = zmq_send(relay->serial_publisher_socket,
-                      (void *)relay->msg_pub_buffer,
-                      bytes_waiting,
-                      0);
-        assert(rc == bytes_waiting);
+                        (void *)relay->msg_pub_buffer,
+                        bytes_waiting,
+                        0);
     }
 
     return;
@@ -206,10 +216,15 @@ void _relay_write(serial_zmq_relay *relay)
 
     if (nbytes > 0)
     {
-        pc = sp_nonblocking_write(relay->port,
-                                  relay->msg_pub_buffer,
-                                  nbytes);
-        assert(pc == nbytes);
+        debug_print("Writing to the serial port %p\n", relay->port);
+
+        pc = sp_blocking_write(relay->port,
+                               (void *)relay->msg_sub_buffer,
+                               nbytes,
+                               (unsigned int)1000);
+        check_relay(relay);
+        debug_print("Wrote %d bytes to the serial port\n", pc);
+        // debug_print("%.*s", bytes_waiting, relay->msg_pub_buffer);
     }
 
     return;
@@ -272,4 +287,38 @@ void relay_launch(const char *port_name,
         close_relay(relay);
         return;
     }
+}
+
+// Add a check valid serial_relay type ie not all nulls port is open etc.
+
+enum sr_return check_relay(serial_zmq_relay *relay)
+{
+    if (relay->port == NULL)
+    {
+        return SR_ERR_SP;
+    }
+
+    if (relay->context == NULL)
+    {
+        return SR_ERR_ZMQ;
+    }
+
+    if (relay->serial_subscriber_socket == NULL)
+    {
+        return SR_ERR_ZMQ;
+    }
+    if (relay->msg_sub_buffer == NULL)
+    {
+        return SR_ERR_MEM;
+    }
+    if (relay->serial_publisher_socket == NULL)
+    {
+        return SR_ERR_ZMQ;
+    }
+    if (relay->msg_pub_buffer == NULL)
+    {
+        return SR_ERR_MEM;
+    }
+
+    return SR_OK;
 }
