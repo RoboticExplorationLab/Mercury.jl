@@ -236,10 +236,16 @@ end
     while (!has_heard)
         sleep(0.001)
         has_heard = Hg.receive(submsg)
-
         Hg.publish(pubmsg)
     end
     @test has_heard
+
+    got_new = false
+    Hg.on_new(submsg) do msg
+        @test msg isa Hg.MercuryMessage
+        got_new = true
+    end
+    @test got_new
 
     @test isopen(sub)
     @test isopen(pub)

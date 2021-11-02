@@ -122,8 +122,7 @@ function receive(sub::ZmqSubscriber, msg::MercuryMessage)
         if bytes_read == -1
             ZMQ.zmq_errno() == ZMQ.EAGAIN || throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
         else
-            getflags(sub).hasreceived = true
-            did_receive = true
+            did_receive = got_new!(sub)
         end
 
         # Forces subscriber to conflate messages
