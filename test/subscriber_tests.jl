@@ -132,7 +132,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         sleep(1.0)
         Hg.receive(sub, msg)
         x_new = msg.x
-        @test x_new - x_prev > 100
+        @test x_new - x_prev > 50
 
         # Benchmark the receive
         b = @benchmark Hg.receive($sub, $msg)

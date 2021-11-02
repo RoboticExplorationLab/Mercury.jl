@@ -179,9 +179,9 @@ enum sr_return _relay_read(serial_zmq_relay *relay)
     if (bytes_waiting > 0)
     {
         int bytes_read = sp_blocking_read(relay->port,
-                                          (void *)relay->msg_pub_buffer,
+                                          relay->msg_pub_buffer,
                                           bytes_waiting,
-                                          (unsigned int)1000);
+                                          1000);
         flag = check_serial(bytes_read);
         if (flag != SR_OK) return flag;
         debug_print("Read %d bytes: %.*s\n", bytes_read, bytes_read, relay->msg_pub_buffer);
@@ -220,10 +220,10 @@ enum sr_return _relay_write(serial_zmq_relay *relay)
     if (flag != SR_OK) return flag;
 
     // Check if a message is available to be received from socket
-    flag = check_zmq(zmq_msg_recv(&msg, relay->serial_sub_socket, 0));
+    int rc = zmq_msg_recv(&msg, relay->serial_sub_socket, ZMQ_DONTWAIT);
 
     // If we heard a message:
-    if (flag == SR_OK)
+    if (rc != -1)
     {
         // Check size of recieved message to make sure it can be copied into our buffer
         size_t msg_size = zmq_msg_size(&msg);
