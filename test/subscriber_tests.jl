@@ -204,12 +204,16 @@ end
     pubmsg = Hg.PublishedMessage(msg_out, pub)
 
     @test !Hg.getflags(submsg.sub).hasreceived
-    while (!Hg.getflags(submsg.sub).hasreceived)
-        Hg.publish(pubmsg)
+
+    has_heard = false
+    while (!has_heard)
         sleep(0.001)
-        Hg.receive(submsg)
+        has_heard = Hg.receive(submsg)
+
+        Hg.publish(pubmsg)
     end
-    @test Hg.getflags(submsg.sub).hasreceived
+    @test has_heard
+
     @test isopen(sub)
     @test isopen(pub)
     Hg.forceclose(sub)
