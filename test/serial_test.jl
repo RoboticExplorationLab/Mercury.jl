@@ -24,16 +24,17 @@ end
 
     do_publish = Threads.Atomic{Bool}(true)
     function pub_message(pub, msg)
+        do_publish
         while (do_publish[])
             Hg.publish(pub, msg)
-            sleep(0.01)
+            sleep(0.5)
         end
     end
 
     pub = Hg.ZmqPublisher(ctx, addr, port_in, name = "TestPub")
     msg_out = TestMsg(x = 10, y = 11, z = 12)
     pub_task = @async pub_message(pub, msg_out)
-    sleep(2.0)
+    sleep(1.0)
 
     # Subscriber to subscribe directly to pub
     sub1 = Hg.ZmqSubscriber(ctx, addr, port_in, name = "TestSub")
@@ -41,21 +42,28 @@ end
     # These should produce identical results
     sub2 = Hg.ZmqSubscriber(ctx, addr, port_out, name = "TestSub")
 
-    @test msg_out.x != msg_in.x
-    @test msg_out.y != msg_in.y
-    @test msg_out.z != msg_in.z
-
     # Recieve pure bytes
-    bytes_in1 = zeros(UInt8, msg_len)
-    bytes_in2 = zeros(UInt8, msg_len)
-    @test Hg.receive(sub1, bytes_in1)
-    @test Hg.receive(sub2, bytes_in2)
-    sleep(1.0)
+    bytes_in1 = zeros(UInt8, 256)
+    bytes_in2 = zeros(UInt8, 256)
+
+    recieved1 = false
+    for i in 1:100
+        recieved1 = Hg.receive(sub1, bytes_in1)
+        sleep(0.1)
+    end
+    recieved2 = false
+    for i in 1:100
+        recieved2 = Hg.receive(sub2, bytes_in2)
+        sleep(0.1)
+    end
+    @test recieved1
+    @test recieved2
 
     @test all(bytes_in1 .== bytes_in2)
 
     msg_in1 = TestMsg(x = 1, y = 1, z = 1)
     msg_in2 = TestMsg(x = 1, y = 1, z = 1)
+
     @test Hg.receive(sub1, msg_in1)
     @test Hg.receive(sub2, msg_in2)
 

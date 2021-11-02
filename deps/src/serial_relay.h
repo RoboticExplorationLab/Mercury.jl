@@ -9,25 +9,27 @@
 
 enum sr_return
 {
-    /** Operation completed successfully. */
+    // Operation completed successfully
     SR_OK = 0,
-    /** Invalid arguments were passed to the function. */
+    // libserialport error
     SR_ERR_SP = -1,
-    /** A system error occurred while executing the operation. */
+    // libzmq error
     SR_ERR_ZMQ = -2,
-    /** A memory allocation failed while executing the operation. */
+    // A memory allocation failure
     SR_ERR_MEM = -3,
 };
 
+// Open a serial port in read write mode and the associated ZMQ ports.
+// If any issue arises closes everything and returns a NULL pointer.
 void *open_relay(const char *port_name,
                  int baudrate,
                  const char *sub_endpoint,
                  const char *pub_endpoint);
 
-void relay_read(void *relay);
-void relay_write(void *relay);
+enum sr_return relay_read(void *relay);
+enum sr_return relay_write(void *relay);
 
-void close_relay(void *relay);
+enum sr_return close_relay(void *relay);
 
 void relay_launch(const char *port_name,
                   int baudrate,
