@@ -212,11 +212,18 @@ end
     Hg.launchtask(submsg)
     @test Hg.isrunning(submsg)
     @test !Hg.getflags(submsg.sub).hasreceived
-    while (!Hg.getflags(submsg.sub).hasreceived)
-        Hg.publish(pubmsg)
+
+    has_heard = false
+    while (!has_heard)
         sleep(0.001)
+        Hg.on_new(submsg) do msg
+            has_heard = true
+        end
+
+        Hg.publish(pubmsg)
     end
-    @test Hg.getflags(submsg.sub).hasreceived
+    @test has_heard
+
     @test isopen(sub)
     @test isopen(pub)
     @test Hg.isrunning(submsg)

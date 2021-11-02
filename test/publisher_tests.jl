@@ -20,7 +20,7 @@ end
 
         @test pub.port == port
         @test pub.ipaddr == addr
-        @test Hg.tcpstring(pub) == "tcp://$addr:$port"
+        @test Hg.portstring(pub) == "tcp://$addr:$port"
         @test pub.name == "publisher_1"
         @test Hg.getname(pub) == "publisher_1"
         @test isopen(pub)
