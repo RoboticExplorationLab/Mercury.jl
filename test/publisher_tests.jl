@@ -32,7 +32,8 @@ end
 
         pub2 = Hg.ZmqPublisher(ctx, addr, string(port))
         @test pub2.name == "publisher_3"
-        close(pub2)
+        Hg.forceclose(pub2)
+        @test !isopen(pub.socket)
 
         pub3 = Hg.ZmqPublisher(ctx, string(addr), port, name = "mypub")
         @test pub3.name == "mypub"

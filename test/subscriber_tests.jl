@@ -78,6 +78,33 @@ ENV["JULIA_DEBUG"] = "Mercury"
         close(sub)
     end
 
+    @testset "Exchanging Byte Vectors" begin
+        # Test simple pub/sub
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
+        @test isopen(sub)
+        pub = Hg.ZmqPublisher(ctx, addr, port)
+        msg_out = Vector{UInt8}("Hello, world!")
+        msg_in = zeros(UInt8, length(msg_out))
+        sleep(0.2)  # needed to give time to set up publisher?
+
+        # publish and receive a message
+        @test !sub.flags.hasreceived
+        i = 1
+        for i = 1:100
+            Hg.publish(pub, msg_out)
+            if Hg.receive(sub, msg_in, ReentrantLock())
+                break
+            end
+        end
+        @test i < 100
+        @test sub.flags.hasreceived
+
+        # make sure the correct message was received
+        @test all(msg_in .== msg_out)
+        close(pub)
+        close(sub)
+    end
+
     @testset "Closing" begin
         sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
         pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
