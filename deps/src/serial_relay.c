@@ -166,6 +166,7 @@ fail_relay_calloc:
     return NULL;
 }
 
+
 enum sr_return _relay_read(serial_zmq_relay *relay)
 {
     enum sr_return flag;
@@ -183,27 +184,30 @@ enum sr_return _relay_read(serial_zmq_relay *relay)
                                           (unsigned int)1000);
         flag = check_serial(bytes_read);
         if (flag != SR_OK) return flag;
+        debug_print("Read %d bytes: %.*s\n", bytes_read, bytes_read, relay->msg_pub_buffer);
 
+        // Construct zmq message and copy data from buffer
         zmq_msg_t msg;
-        flag = check_zmq(zmq_msg_init_size(&msg, (size_t)bytes_read));
+        size_t msg_size = bytes_read;
+        flag = check_zmq(zmq_msg_init_size(&msg, msg_size));
         if (flag != SR_OK) return flag;
 
-        memcpy(zmq_msg_data(&msg), (void *)relay->msg_pub_buffer, (size_t)bytes_read);
+        memcpy(zmq_msg_data(&msg), relay->msg_pub_buffer, msg_size);
 
         // Relay those bytes through zmq
         flag = check_zmq(zmq_msg_send(&msg, relay->serial_pub_socket, 0));
         if (flag != SR_OK) return flag;
-
-        debug_print("Read %d bytes from the serial port\n", bytes_read);
     }
 
     return SR_OK;
 }
 
+
 enum sr_return relay_read(void *relay)
 {
     return _relay_read((serial_zmq_relay *)relay);
 }
+
 
 enum sr_return _relay_write(serial_zmq_relay *relay)
 {
@@ -216,33 +220,45 @@ enum sr_return _relay_write(serial_zmq_relay *relay)
     if (flag != SR_OK) return flag;
 
     // Check if a message is available to be received from socket
-    int bytes_read = zmq_msg_recv(&msg, relay->serial_sub_socket, ZMQ_DONTWAIT);
+    flag = check_zmq(zmq_msg_recv(&msg, relay->serial_sub_socket, 0));
 
-    if (bytes_read > 0)
+    // If we heard a message:
+    if (flag == SR_OK)
     {
+        // Check size of recieved message to make sure it can be copied into our buffer
+        size_t msg_size = zmq_msg_size(&msg);
+        if (msg_size > PORT_BUFFER_SIZE)
+        {
+            fprintf(stderr, "Message size is too large to write to serial port!");
+            return SR_ERR_MEM;
+        }
+
         // Copy the msg into the buffer and free ZMQ message
-        memcpy((void *)relay->msg_pub_buffer, zmq_msg_data(&msg), (size_t)bytes_read);
+        memcpy(relay->msg_sub_buffer, zmq_msg_data(&msg), msg_size);
         flag = check_zmq(zmq_msg_close(&msg));
         if (flag != SR_OK) return flag;
 
         // Write message's bytes to ZMQ port
         bytes_writen = sp_blocking_write(relay->port,
-                                         (void *)relay->msg_sub_buffer,
-                                         bytes_read,
-                                         (unsigned int)1000);
+                                         relay->msg_sub_buffer,
+                                         msg_size,
+                                         1000);
         flag = check_serial(bytes_writen);
-        if (flag != SR_OK) return flag;
+        if (flag != SR_OK)
+            return flag;
 
-        debug_print("Wrote %d bytes to the serial port\n", bytes_writen);
+        debug_print("Wrote %d bytes: %.*s\n", bytes_writen, bytes_writen, relay->msg_sub_buffer);
     }
 
     return SR_OK;
 }
 
+
 enum sr_return relay_write(void *relay)
 {
     return _relay_write((serial_zmq_relay *)relay);
 }
+
 
 enum sr_return _close_relay(serial_zmq_relay *relay)
 {
@@ -272,10 +288,12 @@ enum sr_return _close_relay(serial_zmq_relay *relay)
     return SR_OK;
 }
 
+
 enum sr_return close_relay(void *relay)
 {
     return _close_relay((serial_zmq_relay *)relay);
 }
+
 
 void relay_launch(const char *port_name,
                   int baudrate,
@@ -292,6 +310,7 @@ void relay_launch(const char *port_name,
     {
         while (true)
         {
+            // Add checks here to make sure no errors were thrown
             relay_read(relay);
             relay_write(relay);
         }
@@ -299,6 +318,7 @@ void relay_launch(const char *port_name,
         return;
     }
 }
+
 
 // Add a check valid serial_relay type ie not all nulls port is open etc.
 enum sr_return check_zmq(int rc)
@@ -313,6 +333,7 @@ enum sr_return check_zmq(int rc)
         return SR_OK;
     }
 }
+
 
 enum sr_return check_serial(enum sp_return ret_val)
 {
