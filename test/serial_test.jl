@@ -16,11 +16,12 @@ end
     port_in = "5555"
     port_out = "5556"
 
-    serial_relay = Hg.launch_relay(serial_port_name,
-                                   baudrate,
-                                   Hg.tcpstring(addr, port_in),
-                                   Hg.tcpstring(addr, port_out),
-                                   )
+    serial_relay = Hg.launch_relay(
+        serial_port_name,
+        baudrate,
+        Hg.tcpstring(addr, port_in),
+        Hg.tcpstring(addr, port_out),
+    )
 
     do_publish = Threads.Atomic{Bool}(true)
     function pub_message(pub, msg)
@@ -50,7 +51,7 @@ end
 
     recieved1 = false
     recieved2 = false
-    for i in 1:100
+    for i = 1:100
         if !recieved1
             recieved1 = Hg.receive(sub1, bytes_in1)
         elseif !recieved2
@@ -77,7 +78,7 @@ end
 
     recieved1 = false
     recieved2 = false
-    for i in 1:100
+    for i = 1:100
         if !recieved1
             recieved1 = Hg.receive(sub1, msg_in1)
         elseif !recieved2
