@@ -110,7 +110,7 @@ void *open_relay(const char *port_name,
     flag = check_zmq(zmq_setsockopt(relay->serial_sub_socket, ZMQ_SUBSCRIBE, "", 0));
     if (flag != SR_OK)
     {
-        fprintf(stderr, "Failed to set socket to subscriber!\n", sub_endpoint);
+        fprintf(stderr, "Failed to set socket to subscriber!\n");
         goto fail_sub_setsockopt;
     }
     flag = check_zmq(zmq_setsockopt(relay->serial_sub_socket, ZMQ_CONFLATE, &conflate, sizeof(conflate)));
@@ -142,27 +142,27 @@ void *open_relay(const char *port_name,
 
     return relay;
 
-fail_pub_bind:
-fail_pub_setsockopt:
-fail_sub_connect:
-fail_sub_setsockopt:
+fail_pub_bind:;
+fail_pub_setsockopt:;
+fail_sub_connect:;
+fail_sub_setsockopt:;
     zmq_close(relay->serial_sub_socket);
-fail_sub_socket:
+fail_sub_socket:;
     zmq_close(relay->serial_pub_socket);
-fail_pub_socket:
+fail_pub_socket:;
     zmq_ctx_destroy(relay->context);
-fail_context:
+fail_context:;
     free(relay->msg_pub_buffer);
-fail_pub_buffer:
+fail_pub_buffer:;
     free(relay->msg_sub_buffer);
-fail_sub_buffer:
-fail_set_baudrate:
+fail_sub_buffer:;
+fail_set_baudrate:;
     sp_close(relay->port);
     sp_free_port(relay->port);
-fail_sp_open:
-fail_port_name:
+fail_sp_open:;
+fail_port_name:;
     free(relay);
-fail_relay_calloc:
+fail_relay_calloc:;
     return NULL;
 }
 

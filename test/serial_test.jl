@@ -42,7 +42,7 @@ end
     do_publish[] = true
     bytes_out = Vector{UInt8}("Hello World!")
     pub_task = @async pub_message(pub, bytes_out)
-    sleep(1.0)
+    sleep(2.0)
 
     # Input arrays
     bytes_in1 = zeros(UInt8, sizeof(bytes_out))
@@ -70,7 +70,7 @@ end
     msg_out = TestMsg(x = 10, y = 11, z = 12)
     do_publish[] = true
     pub_task = @async pub_message(pub, msg_out)
-    sleep(1.0)
+    sleep(2.0)
 
     msg_in1 = TestMsg(x = 1, y = 1, z = 1)
     msg_in2 = TestMsg(x = 1, y = 1, z = 1)
