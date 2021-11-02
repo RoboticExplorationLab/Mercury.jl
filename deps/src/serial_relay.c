@@ -337,12 +337,14 @@ enum sr_return check_zmq(int rc)
 
 enum sr_return check_serial(enum sp_return ret_val)
 {
+    char *error_message;
+
     switch (ret_val)
     {
         case SP_ERR_ARG:
             fprintf(stderr, "Libserialport Error: Invalid argument.\n");
         case SP_ERR_FAIL:
-            char *error_message = sp_last_error_message();
+            error_message = sp_last_error_message();
             fprintf(stderr, "Libserialport Error: Failed: %s\n", error_message);
             sp_free_error_message(error_message);
         case SP_ERR_SUPP:
