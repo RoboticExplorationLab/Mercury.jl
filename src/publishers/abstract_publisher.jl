@@ -17,7 +17,7 @@ Base.close(sub::Publisher)::Nothing =
     error("The `close` method hasn't been implemented for your Publisher yet!")
 @inline getname(pub::Publisher)::String = pub.name
 @inline getflags(pub::Publisher)::PublisherFlags = pub.flags
-portstring(sub::Publisher)::String = ""
+portstring(sub::Publisher)::String = error("The `portstring` method hasn't been implemented for your Publisher yet!")
 
 
 """
