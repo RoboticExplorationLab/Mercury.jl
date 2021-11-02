@@ -92,7 +92,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         i = 1
         for i = 1:100
             Hg.publish(pub, msg_out)
-            if Hg.receive(sub, msg_in, ReentrantLock())
+            if Hg.receive(sub, msg_in)
                 break
             end
         end
