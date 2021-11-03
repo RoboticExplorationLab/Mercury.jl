@@ -212,7 +212,7 @@ enum sr_return relay_read(void *relay)
 enum sr_return _relay_write(serial_zmq_relay *relay)
 {
     enum sr_return flag;
-    int bytes_writen;
+    int bytes_written;
 
     // Initialize ZMQ message
     zmq_msg_t msg;
@@ -225,7 +225,7 @@ enum sr_return _relay_write(serial_zmq_relay *relay)
     // If we heard a message:
     if (rc != -1)
     {
-        // Check size of recieved message to make sure it can be copied into our buffer
+        // Check size of received message to make sure it can be copied into our buffer
         size_t msg_size = zmq_msg_size(&msg);
         if (msg_size > PORT_BUFFER_SIZE)
         {
@@ -239,15 +239,15 @@ enum sr_return _relay_write(serial_zmq_relay *relay)
         if (flag != SR_OK) return flag;
 
         // Write message's bytes to ZMQ port
-        bytes_writen = sp_blocking_write(relay->port,
-                                         relay->msg_sub_buffer,
-                                         msg_size,
-                                         1000);
-        flag = check_serial(bytes_writen);
+        bytes_written = sp_blocking_write(relay->port,
+                                          relay->msg_sub_buffer,
+                                          msg_size,
+                                          1000);
+        flag = check_serial(bytes_written);
         if (flag != SR_OK)
             return flag;
 
-        debug_print("Wrote %d bytes: %.*s\n", bytes_writen, bytes_writen, relay->msg_sub_buffer);
+        debug_print("Wrote %d bytes: %.*s\n", bytes_written, bytes_written, relay->msg_sub_buffer);
     }
 
     return SR_OK;
@@ -283,7 +283,11 @@ enum sr_return _close_relay(serial_zmq_relay *relay)
     flag = check_serial(sp_close(relay->port));
     if (flag != SR_OK) return flag;
 
+    // Free serial port
     sp_free_port(relay->port);
+
+    // Free relay object
+    free(relay);
 
     return SR_OK;
 }
@@ -310,7 +314,7 @@ void relay_launch(const char *port_name,
     {
         while (true)
         {
-            // Add checks here to make sure no errors were thrown
+            //TODO: Add checks here to make sure no errors were thrown
             relay_read(relay);
             relay_write(relay);
         }
@@ -320,12 +324,12 @@ void relay_launch(const char *port_name,
 }
 
 
-// Add a check valid serial_relay type ie not all nulls port is open etc.
+//TODO: Add a check valid serial_relay type ie not all nulls port is open etc.
 enum sr_return check_zmq(int rc)
 {
     if (rc == -1)
     {
-        fprintf(stderr, "Error occurred during zmq_init(): %s\n", zmq_strerror(zmq_errno()));
+        fprintf(stderr, "Error occurred during zmq opperation: %s\n", zmq_strerror(zmq_errno()));
         return SR_ERR_ZMQ;
     }
     else
@@ -343,19 +347,21 @@ enum sr_return check_serial(enum sp_return ret_val)
     {
         case SP_ERR_ARG:
             fprintf(stderr, "Libserialport Error: Invalid argument.\n");
+            return SR_ERR_SP;
         case SP_ERR_FAIL:
             error_message = sp_last_error_message();
             fprintf(stderr, "Libserialport Error: Failed: %s\n", error_message);
             sp_free_error_message(error_message);
+            return SR_ERR_SP;
         case SP_ERR_SUPP:
             fprintf(stderr, "Libserialport Error: Not supported.\n");
+            return SR_ERR_SP;
         case SP_ERR_MEM:
             fprintf(stderr, "Libserialport Error: Couldn't allocate memory.\n");
+            return SR_ERR_SP;
         case SP_OK:
             return SR_OK;
         default:
             return SR_OK;
     }
-
-    return SR_ERR_SP;
 }

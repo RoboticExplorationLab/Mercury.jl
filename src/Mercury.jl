@@ -16,6 +16,7 @@ elseif Sys.isapple()
 end
 const libhg = libhg_library_filename
 
+const MercuryMessage = Union{ProtoBuf.ProtoType,AbstractVector{UInt8}}
 
 include("utils.jl")
 include("serial_relay.jl")

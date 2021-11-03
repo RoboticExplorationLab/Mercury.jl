@@ -10,11 +10,7 @@ add_executable(relay_launch
     serial_relay.c
     relay_launch.c
 )
-target_include_directories(relay_launch
-    PRIVATE
-        ${SERIALPORT_DIR}
-        $<BUILD_INTERFACE:${libzmq_SOURCE_DIR}/include>
-)
+target_compile_definitions(relay_launch PRIVATE DEBUG=1)
 target_link_libraries(relay_launch
     PRIVATE
         libserialport
@@ -32,8 +28,4 @@ add_library(hg
 target_link_libraries(hg
     PRIVATE
     libzmq
-)
-target_include_directories(hg
-    PRIVATE
-    $<BUILD_INTERFACE:${libzmq_SOURCE_DIR}/include>
 )

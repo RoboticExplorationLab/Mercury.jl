@@ -190,7 +190,7 @@ end
 getoptions(node::Node) = getIO(node).opts
 getflags(node::Node) = getIO(node).flags
 getrate(node::Node)::Float64 = getoptions(node).rate
-function isnodedone(node::Node)::Bool
+function shouldnodefinish(node::Node)::Bool
     return getflags(node).should_finish[]
 end
 
@@ -275,17 +275,18 @@ function launch(node::Node)
 
         getflags(node).is_running[] = true
 
-        @rate while !isnodedone(node)
-            # Check the subscribers for new messages
-            compute(node)
-
+        @rate while !shouldnodefinish(node)
             # Check the subscribers for new messages
             poll_subscribers(node)
+
+            # Check the subscribers for new messages
+            compute(node)
 
             GC.gc(false)
             yield()
         end lrl
         @info "Closing node $(getname(node))"
+        finishup(node)
         closeall(node)
     catch err
         if err isa InterruptException
@@ -299,6 +300,7 @@ function launch(node::Node)
             getflags(node).did_error[] = true
             rethrow(err)
         end
+        finishup(node)
         closeall(node)
     end
     getflags(node).is_running[] = false
