@@ -23,6 +23,4 @@ if Sys.islinux()
     include("rate_limiter_tests.jl")
 end
 
-@testset "Node" begin
-    include("node_tests.jl")
-end
+include("node_tests.jl")

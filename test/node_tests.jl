@@ -70,84 +70,81 @@ function Hg.compute(node::SubNode)
     y = node.test_msg.y
     z = node.test_msg.z
     submsg = Hg.getIO(node).subs[1]
-    lock(submsg.lock) do
-        x = node.test_msg.x
-        y = node.test_msg.y
-        z = node.test_msg.z
-    end
+
+    x = node.test_msg.x
+    y = node.test_msg.y
+    z = node.test_msg.z
+
     println("Received x = $x")
 end
 
+@testset "Node" begin
 
-println("######## NODE TESTS #############")
-## Initialize publisher
-ctx = ZMQ.Context()
-node = PubNode(ctx)
-Hg.setupIO!(node, Hg.getIO(node))
-@test Hg.getname(node) == "PubNode"
-@test Hg.getname(Hg.getpublisher(node, 1)) == "test_pub"
-@test Hg.getname(Hg.getpublisher(node, 1).pub) == "test_pub"
-@test Hg.getname(Hg.getpublisher(node, "test_pub")) == "test_pub"
-@test Hg.getpublisher(node, "test_pub").msg isa TestMsg
-@test Hg.numpublishers(node) == 1
-@test Hg.numsubscribers(node) == 0
+    println("######## NODE TESTS #############")
+    ## Initialize publisher
+    ctx = ZMQ.Context()
+    node = PubNode(ctx)
+    Hg.setupIO!(node, Hg.getIO(node))
+    @test Hg.getname(node) == "PubNode"
+    @test Hg.getname(Hg.getpublisher(node, 1)) == "test_pub"
+    @test Hg.getname(Hg.getpublisher(node, 1).pub) == "test_pub"
+    @test Hg.getname(Hg.getpublisher(node, "test_pub")) == "test_pub"
+    @test Hg.getpublisher(node, "test_pub").msg isa TestMsg
+    @test Hg.numpublishers(node) == 1
+    @test Hg.numsubscribers(node) == 0
 
-Hg.printstatus(node)
+    Hg.printstatus(node)
 
-## Initialize subscriber
-using Base.Threads
-Hg.reset_sub_count()
-subnode = SubNode()
-Hg.setupIO!(subnode, Hg.getIO(subnode))
-sub = Hg.getsubscriber(subnode, 1)
-@test isopen(sub.sub)
-@test sub === Hg.getsubscriber(subnode, "subscriber_1")
-@test isnothing(Hg.getsubscriber(subnode, "sub2"))
-@test Hg.numsubscribers(subnode) == 1
-@test Hg.numpublishers(subnode) == 0
+    ## Initialize subscriber
+    using Base.Threads
+    Hg.reset_sub_count()
+    subnode = SubNode()
+    Hg.setupIO!(subnode, Hg.getIO(subnode))
+    sub = Hg.getsubscriber(subnode, 1)
+    @test isopen(sub.sub)
+    @test sub === Hg.getsubscriber(subnode, "subscriber_1")
+    @test isnothing(Hg.getsubscriber(subnode, "sub2"))
+    @test Hg.numsubscribers(subnode) == 1
+    @test Hg.numpublishers(subnode) == 0
 
-Hg.printstatus(subnode)
+    Hg.printstatus(subnode)
 
-## Launch tasks
-task = @async Hg.launch(node)
-@test !istaskdone(task)
-@test !istaskfailed(task)
-@test Hg.node_sockets_are_open(node)
+    ## Launch tasks
+    task = @async Hg.launch(node)
+    @test !istaskdone(task)
+    @test !istaskfailed(task)
+    @test Hg.node_sockets_are_open(node)
 
-Hg.getflags(subnode).should_finish[] = false
-subtask = Threads.@spawn Hg.launch(subnode)
-@test !istaskdone(subtask)
-@test !istaskfailed(subtask)
-@test Hg.node_sockets_are_open(subnode)
+    Hg.getflags(subnode).should_finish[] = false
+    subtask = Threads.@spawn Hg.launch(subnode)
+    @test !istaskdone(subtask)
+    @test !istaskfailed(subtask)
+    @test Hg.node_sockets_are_open(subnode)
 
-##
-sleep(1)
-@test Hg.isrunning(Hg.getsubscriber(subnode, 1))
-Hg.stopnode(node)     # closing publisher first should be fine
-Hg.stopnode(subnode)
-sleep(0.1)  # give some time for the tasks to finish
-@test !Hg.isrunning(Hg.getsubscriber(subnode, 1))
-@test !Hg.getflags(node).is_running[]
-@test !Hg.getflags(subnode).is_running[]
+    ##
+    sleep(1)
+    Hg.stopnode(node)     # closing publisher first should be fine
+    Hg.stopnode(subnode)
+    sleep(0.1)  # give some time for the tasks to finish
+    @test !Hg.getflags(node).is_running[]
+    @test !Hg.getflags(subnode).is_running[]
 
-@test !Hg.getflags(node).did_error[]
-@test !Hg.getflags(subnode).did_error[]
-Hg.printstatus(node)
-Hg.printstatus(subnode)
+    @test !Hg.getflags(node).did_error[]
+    @test !Hg.getflags(subnode).did_error[]
+    Hg.printstatus(node)
+    Hg.printstatus(subnode)
 
-sleep(0.5)
-pub = Hg.getpublisher(node, 1)
-@test !isopen(pub.pub)
-sub = Hg.getsubscriber(subnode, 1)
-@test !isopen(sub.sub)
-for submsg in subnode.nodeio.subs
-    @test isempty(submsg.task)
+    sleep(0.5)
+    pub = Hg.getpublisher(node, 1)
+    @test !isopen(pub.pub)
+    sub = Hg.getsubscriber(subnode, 1)
+    @test !isopen(sub.sub)
+
+    dx = node.test_msg.x - subnode.test_msg.x
+    dy = node.test_msg.y - subnode.test_msg.y
+    dz = node.test_msg.z - subnode.test_msg.z
+    @test abs(dx) <= 1
+    @test abs(dy) <= 2
+    @test abs(dz) <= 3
+    @show node.test_msg.x
 end
-
-dx = node.test_msg.x - subnode.test_msg.x
-dy = node.test_msg.y - subnode.test_msg.y
-dz = node.test_msg.z - subnode.test_msg.z
-@test abs(dx) <= 1
-@test abs(dy) <= 2
-@test abs(dz) <= 3
-@show node.test_msg.x

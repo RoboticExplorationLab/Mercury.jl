@@ -63,7 +63,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         i = 1
         for i = 1:100
             Hg.publish(pub, msg_out)
-            if Hg.receive(sub, msg, ReentrantLock())
+            if Hg.receive(sub, msg)
                 break
             end
         end
@@ -78,22 +78,44 @@ ENV["JULIA_DEBUG"] = "Mercury"
         close(sub)
     end
 
+    @testset "Exchanging Byte Vectors" begin
+        # Test simple pub/sub
+        sub = Hg.ZmqSubscriber(ctx, addr, port)
+        @test isopen(sub)
+        pub = Hg.ZmqPublisher(ctx, addr, port)
+        msg_out = Vector{UInt8}("Hello, world!")
+        msg_in = zeros(UInt8, length(msg_out))
+        sleep(0.2)  # needed to give time to set up publisher?
+
+        # publish and receive a message
+        @test !sub.flags.hasreceived
+        i = 1
+        for i = 1:100
+            Hg.publish(pub, msg_out)
+            if Hg.receive(sub, msg_in)
+                break
+            end
+        end
+        @test i < 100
+        @test sub.flags.hasreceived
+
+        # make sure the correct message was received
+        @test all(msg_in .== msg_out)
+        close(pub)
+        close(sub)
+    end
+
     @testset "Closing" begin
         sub = Hg.ZmqSubscriber(ctx, addr, port, name = "TestSub")
         pub = Hg.ZmqPublisher(ctx, addr, port, name = "TestPub")
-        msg = TestMsg(x = 10, y = 11, z = 12)
+        msg_in = TestMsg(x = 10, y = 11, z = 12)
         msg_out = TestMsg(x = 1, y = 2, z = 3)
 
         # Close the task by waiting for a receive
-        sub_task = @task Hg.subscribe(sub, msg, ReentrantLock())
-        schedule(sub_task)
         cnt = 0
         timeout = 5.0 # seconds
-        @test Hg.publish_until_receive(pub, sub, msg_out, timeout)
-        @test !istaskdone(sub_task)
-        # sleep(1.0)
-        @show sub.flags.hasreceived
-        @test msg.x == msg_out.x
+        @test Hg.publish_until_receive(pub, sub, msg_out, msg_in, timeout)
+        @test msg_in.x == msg_out.x
 
         # Should be able to close at any time
         close(sub)
@@ -126,22 +148,21 @@ ENV["JULIA_DEBUG"] = "Mercury"
         pub_task = @async pub_message(pub)
         @test !istaskdone(pub_task)
         @test !istaskfailed(pub_task)
-        # do_publish[] = false 
+        # do_publish[] = false
         @test isopen(pub)
 
         @test isopen(sub)
-        recv_lock = ReentrantLock()
 
         # Retrieve 2 messages to make sure the publisher is working
-        Hg.receive(sub, msg, recv_lock)
+        Hg.receive(sub, msg)
         x_prev = msg.x
         sleep(1.0)
-        Hg.receive(sub, msg, recv_lock)
+        Hg.receive(sub, msg)
         x_new = msg.x
-        @test x_new - x_prev > 200
+        @test x_new - x_prev > 50
 
         # Benchmark the receive
-        b = @benchmark Hg.receive($sub, $msg, $recv_lock)
+        b = @benchmark Hg.receive($sub, $msg)
         @test maximum(b.gctimes) == 0  # no garbage collection
         @test b.memory == 0            # no dynamic memory allocations
 
@@ -184,7 +205,7 @@ ENV["JULIA_DEBUG"] = "Mercury"
         sleep(0.5)
         Hg.receive(sub, msg)
         second_rec = msg.x
-        @test second_rec > first_rec + 10
+        @test second_rec > first_rec + 5
 
         do_publish = false
         sleep(0.1)
@@ -209,19 +230,26 @@ end
     submsg = Hg.SubscribedMessage(msg, sub)
     pubmsg = Hg.PublishedMessage(msg_out, pub)
 
-    Hg.launchtask(submsg)
-    @test Hg.isrunning(submsg)
     @test !Hg.getflags(submsg.sub).hasreceived
-    while (!Hg.getflags(submsg.sub).hasreceived)
-        Hg.publish(pubmsg)
+
+    has_heard = false
+    while (!has_heard)
         sleep(0.001)
+        has_heard = Hg.receive(submsg)
+        Hg.publish(pubmsg)
     end
-    @test Hg.getflags(submsg.sub).hasreceived
+    @test has_heard
+
+    got_new = false
+    Hg.on_new(submsg) do msg
+        @test msg isa Hg.MercuryMessage
+        got_new = true
+    end
+    @test got_new
+
     @test isopen(sub)
     @test isopen(pub)
-    @test Hg.isrunning(submsg)
     Hg.forceclose(sub)
     close(pub)
     sleep(0.2)  # give a little bit of time to close the task
-    @test !Hg.isrunning(submsg)
 end

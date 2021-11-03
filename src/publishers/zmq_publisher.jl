@@ -29,7 +29,7 @@ struct ZmqPublisher <: Publisher
     ipaddr::Sockets.IPv4
     buffer::IOBuffer
     name::String
-    ctx::ZMQ.Context
+    socket_lock::ReentrantLock
     flags::PublisherFlags
 
     function ZmqPublisher(
@@ -37,6 +37,7 @@ struct ZmqPublisher <: Publisher
         ipaddr::Sockets.IPv4,
         port::Integer;
         name = genpublishername(),
+        buffersize = 255,
     )
         local socket
         @catchzmq(
@@ -47,52 +48,72 @@ struct ZmqPublisher <: Publisher
             ZMQ.bind(socket, "tcp://$ipaddr:$port"),
             "Could not bind publisher $name to $(tcpstring(ipaddr, port))"
         )
+
         @info "Publishing $name on: $(tcpstring(ipaddr, port)), isopen = $(isopen(socket))"
-        new(socket, port, ipaddr, IOBuffer(), name, ctx, PublisherFlags())
+        new(
+            socket,
+            port,
+            ipaddr,
+            IOBuffer(zeros(UInt8, buffersize); read = true, write = true),
+            name,
+            ReentrantLock(),
+            PublisherFlags(),
+        )
     end
 end
-function ZmqPublisher(ctx::ZMQ.Context, ipaddr, port::Integer; name = genpublishername())
+
+function ZmqPublisher(ctx::ZMQ.Context, ipaddr, port::Integer; kwargs...)
     if !(ipaddr isa Sockets.IPv4)
         ipaddr = Sockets.IPv4(ipaddr)
     end
-    ZmqPublisher(ctx, ipaddr, port, name = name)
+    ZmqPublisher(ctx, ipaddr, port; kwargs...)
 end
-function ZmqPublisher(
-    ctx::ZMQ.Context,
-    ipaddr,
-    port::AbstractString;
-    name = genpublishername(),
-)
-    ZmqPublisher(ctx, ipaddr, parse(Int, port), name = name)
+
+function ZmqPublisher(ctx::ZMQ.Context, ipaddr, port::AbstractString; kwargs...)
+    ZmqPublisher(ctx, ipaddr, parse(Int, port); kwargs...)
 end
 
 getcomtype(::ZmqPublisher) = :zmq
-Base.isopen(pub::ZmqPublisher) = Base.isopen(pub.socket)
+function Base.isopen(pub::ZmqPublisher)
+    return lock(() -> ZMQ.isopen(pub.socket), pub.socket_lock)
+end
+
 function Base.close(pub::ZmqPublisher)
-    if isopen(pub.socket)
-        @debug "Closing ZmqPublisher: $(getname(pub))"
-        Base.close(pub.socket)
+    lock(pub.socket_lock) do
+        if isopen(pub.socket)
+            @debug "Closing ZmqPublisher: $(getname(pub))"
+            ZMQ.close(pub.socket)
+        end
     end
 end
 
-function publish(pub::ZmqPublisher, proto_msg::ProtoBuf.ProtoType)
+function forceclose(pub::ZmqPublisher)
+    @warn "Force closing ZmqPublisher: $(getname(pub))"
+    close(pub.socket)
+end
+
+function publish(pub::ZmqPublisher, msg::MercuryMessage)
+    pub.flags.has_published = false
+
+    bytes_sent = Int32(0)
     if isopen(pub)
         # Encode the message with protobuf
-        msg_size = ProtoBuf.writeproto(pub.buffer, proto_msg)
+        msg_size = encode!(msg, pub.buffer)
+        getflags(pub).bytespublished = msg_size
 
         # Create a new message to be sent and copy the encoded protobuf bytes
-        msg = ZMQ.Message(msg_size)
-        copyto!(msg, 1, pub.buffer.data, 1, msg_size)
+        zmsg = ZMQ.Message(msg_size)
+        copyto!(zmsg, 1, pub.buffer.data, 1, msg_size)
 
         # Send over ZMQ
         # NOTE: ZMQ will de-allocate the message allocated above, so garbage
         # collection should not be an issue here
-        ZMQ.send(pub.socket, msg)
-        getflags(pub).has_published[] = true
+        ZMQ.send(pub.socket, zmsg)
+        getflags(pub).has_published = true
 
         # Move to the beginning of the buffer
         seek(pub.buffer, 0)
     end
 end
 
-tcpstring(pub::ZmqPublisher) = "tcp://" * string(pub.ipaddr) * ":" * string(pub.port)
+portstring(pub::ZmqPublisher) = tcpstring(pub.ipaddr, pub.port)

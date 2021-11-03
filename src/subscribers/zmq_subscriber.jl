@@ -62,7 +62,7 @@ struct ZmqSubscriber <: Subscriber
         )
         @catchzmq(
             ZMQ.connect(socket, "tcp://$ipaddr:$port"),
-            "Could not connect subscriber $name to port $(portstring(ipaddr, port))."
+            "Could not connect subscriber $name to port $(tcpstring(ipaddr, port))."
         )
 
         @info "Subscribing $name to: tcp://$ipaddr:$port"
@@ -92,14 +92,14 @@ end
 
 getcomtype(::ZmqSubscriber) = :zmq
 function Base.isopen(sub::ZmqSubscriber)
-    return lock(() -> isopen(sub.socket), sub.socket_lock)
+    return lock(() -> ZMQ.isopen(sub.socket), sub.socket_lock)
 end
 
 function Base.close(sub::ZmqSubscriber)
     lock(sub.socket_lock) do
         if isopen(sub.socket)
             @debug "Closing ZmqSubscriber: $(getname(sub))"
-            close(sub.socket)
+            ZMQ.close(sub.socket)
         end
     end
 end
@@ -109,21 +109,20 @@ function forceclose(sub::ZmqSubscriber)
     close(sub.socket)
 end
 
-function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantLock())
+function receive(sub::ZmqSubscriber, msg::MercuryMessage)
     did_receive = false
-    sub.flags.isreceiving = true
+    getflags(sub).isreceiving = true
     bin_data = sub.zmsg
 
     bytes_read = Int32(0)
     if isopen(sub)
         bytes_read = ZMQ.msg_recv(sub.socket, bin_data, ZMQ.ZMQ_DONTWAIT)::Int32
-        sub.flags.bytesrecieved = bytes_read
+        getflags(sub).bytesrecieved = bytes_read
 
         if bytes_read == -1
             ZMQ.zmq_errno() == ZMQ.EAGAIN || throw(ZMQ.StateError(ZMQ.jl_zmq_error_str()))
         else
-            sub.flags.hasreceived = true
-            did_receive = true
+            did_receive = got_new!(sub)
         end
 
         # Forces subscriber to conflate messages
@@ -138,17 +137,13 @@ function receive(sub::ZmqSubscriber, buf, write_lock::ReentrantLock = ReentrantL
     end
 
     # Copy the data to the local buffer and decode
+
     if did_receive
         seek(sub.buffer, 0)
+        copyto!(sub.buffer.data, 1, bin_data, 1, bytes_read)
         sub.buffer.size = bytes_read
-        for i = 1:bytes_read
-            sub.buffer.data[i] = bin_data[i]
-        end
 
-        # Obtain the lock for the destination buffer and decode the message data
-        lock(write_lock)
-        decode!(buf, sub.buffer)
-        unlock(write_lock)
+        decode!(msg, sub.buffer)
     end
 
     return did_receive
@@ -168,7 +163,8 @@ The function returns `true` if a message was received before `timeout` seconds h
 function publish_until_receive(
     pub::ZmqPublisher,
     sub::ZmqSubscriber,
-    msg_out::ProtoBuf.ProtoType,
+    msg_out::MercuryMessage,
+    msg_in::MercuryMessage,
     timeout = 1.0,  # seconds
 )
     @assert pub.ipaddr == sub.ipaddr && pub.port == sub.port "Publisher and subscriber must be on the same port!"
@@ -179,6 +175,7 @@ function publish_until_receive(
     while (time() - t_start < timeout)
         publish(pub, msg_out)
         sleep(0.001)
+        receive(sub, msg_in)
         if sub.flags.hasreceived
             return true
         end

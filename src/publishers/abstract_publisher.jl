@@ -1,9 +1,12 @@
 Base.@kwdef mutable struct PublisherFlags
-    has_published::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
+    "Is the publisher currently sending data"
+    has_published::Bool = false
 
-    "Should the publisher finish? Cleanest way to stop a publisher task."
-    "Specifically useful for stopping publishing in a different thread"
-    should_finish::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
+    "Did the publisher exit with an error"
+    diderror::Bool = false
+
+    "# Of bytes of last message sent"
+    bytespublished::Int64 = 0
 end
 
 abstract type Publisher end
@@ -12,10 +15,29 @@ Base.isopen(sub::Publisher)::Nothing =
     error("The `isopen` method hasn't been implemented for your Publisher yet!")
 Base.close(sub::Publisher)::Nothing =
     error("The `close` method hasn't been implemented for your Publisher yet!")
-getname(pub::Publisher)::String = pub.name
-getflags(pub::Publisher)::PublisherFlags = pub.flags
+@inline getname(pub::Publisher)::String = pub.name
+@inline getflags(pub::Publisher)::PublisherFlags = pub.flags
+portstring(sub::Publisher)::String =
+    error("The `portstring` method hasn't been implemented for your Publisher yet!")
 
-function publish(pub::Publisher, proto_msg::ProtoBuf.ProtoType)::Nothing
+
+"""
+Write out the byte data into the message container buf. Returns the number of bytes written
+"""
+function encode!(buf::ProtoBuf.ProtoType, bin_data::IOBuffer)
+    bytes_written = ProtoBuf.writeproto(bin_data, buf)
+
+    return bytes_written
+end
+
+function encode!(buf::AbstractVector{UInt8}, bin_data::IOBuffer)
+    bytes_written = min(length(buf), bin_data.size)
+    copyto!(bin_data.data, 1, buf, 1, bytes_written)
+
+    return bytes_written
+end
+
+function publish(pub::Publisher, msg::MercuryMessage)::Nothing
     throw(
         MercuryException(
             "The `publish` method hasn't been implemented for your Publisher yet!",
@@ -28,14 +50,10 @@ Specifies a publisher along with specific message type.
 This is useful for tracking multiple messages at once
 """
 struct PublishedMessage
-    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}}
+    msg::MercuryMessage
     pub::Publisher
     name::String
-    function PublishedMessage(
-        msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
-        pub::Publisher;
-        name = getname(pub),
-    )
+    function PublishedMessage(msg::MercuryMessage, pub::Publisher; name = getname(pub))
         new(msg, pub, name)
     end
 end

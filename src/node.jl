@@ -75,11 +75,7 @@ Inside of `compute`:
     ...
 
 """
-function add_publisher!(
-    nodeio::NodeIO,
-    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
-    pub::Publisher,
-)
+function add_publisher!(nodeio::NodeIO, msg::MercuryMessage, pub::Publisher)
     push!(nodeio.pubs, PublishedMessage(msg, pub))
 end
 
@@ -128,11 +124,7 @@ In `compute`:
     # use node.local_test_msg in the rest of the code
     ...
 """
-function add_subscriber!(
-    nodeio::NodeIO,
-    msg::Union{ProtoBuf.ProtoType,AbstractVector{UInt8}},
-    sub::Subscriber,
-)
+function add_subscriber!(nodeio::NodeIO, msg::MercuryMessage, sub::Subscriber)
     push!(nodeio.subs, SubscribedMessage(msg, sub))
 end
 
@@ -198,11 +190,10 @@ end
 getoptions(node::Node) = getIO(node).opts
 getflags(node::Node) = getIO(node).flags
 getrate(node::Node)::Float64 = getoptions(node).rate
-function isnodedone(node::Node)::Bool
-    nodeio = getIO(node)
-    all_running = all(isrunning.(nodeio.subs))
-    return getflags(node).should_finish[] || !all_running
+function shouldnodefinish(node::Node)::Bool
+    return getflags(node).should_finish[]
 end
+
 function stopnode(node::Node; timeout = 1.0)
     getflags(node).should_finish[] = true
     t_start = time()
@@ -279,21 +270,23 @@ function launch(node::Node)
         rate = getrate(node)
         lrl = LoopRateLimiter(rate)
 
-        # Launch the subscriber tasks asynchronously
-        start_subscribers(node)
-
         # Run any necessary startup
         startup(node)
 
         getflags(node).is_running[] = true
 
-        @rate while !isnodedone(node)
+        @rate while !shouldnodefinish(node)
+            # Check the subscribers for new messages
+            poll_subscribers(node)
+
+            # Check the subscribers for new messages
             compute(node)
 
             GC.gc(false)
             yield()
         end lrl
         @info "Closing node $(getname(node))"
+        finishup(node)
         closeall(node)
     catch err
         if err isa InterruptException
@@ -307,16 +300,17 @@ function launch(node::Node)
             getflags(node).did_error[] = true
             rethrow(err)
         end
+        finishup(node)
         closeall(node)
     end
     getflags(node).is_running[] = false
 end
 
-function start_subscribers(node::Node)
+function poll_subscribers(node::Node)
     nodeio = getIO(node)
 
     for submsg in nodeio.subs
-        launchtask(submsg)
+        receive(submsg)
     end
 end
 
@@ -330,13 +324,6 @@ function closeall(node::Node)
     end
     for pubmsg in nodeio.pubs
         close(pubmsg.pub)
-    end
-    # Wait for async tasks to finish
-    for submsg in nodeio.subs
-        if !isempty(submsg.task)
-            wait(submsg.task[end])
-            pop!(submsg.task)
-        end
     end
 
     return nothing
