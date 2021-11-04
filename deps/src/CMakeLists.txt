@@ -10,7 +10,10 @@ add_executable(relay_launch
     serial_relay.c
     relay_launch.c
 )
-target_compile_definitions(relay_launch PRIVATE DEBUG=1)
+target_compile_definitions(relay_launch
+    PRIVATE
+    DEBUG=0
+)
 target_link_libraries(relay_launch
     PRIVATE
         libserialport
