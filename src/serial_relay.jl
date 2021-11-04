@@ -19,6 +19,7 @@ function launch_relay(
         return SERIAL_PORTS[port_name]
     end
 
+    @info "Launching serial relay for: $(port_name), with write port: $(sub_endpoint) and read port: $(pub_endpoint)"
     relay_exe = joinpath(dirname(pathof(Mercury)), "..", "deps", "build", "relay_launch")
     cmd = `$relay_exe $port_name $baudrate $sub_endpoint $pub_endpoint`
 
@@ -47,7 +48,16 @@ end
 
 function Base.close(serial_relay::SerialZmqRelay)
     if process_running(serial_relay) # true
+        @info "Closing down Serial-ZMQ relay."
         kill(serial_relay)
+    end
+end
+
+# TODO: Check if there is a way to capture STDOUT/STDERR from process without waiting
+function check_relay_running(serial_relay::SerialZmqRelay)
+    if !process_running(serial_relay) # true
+        @warn "Serial-ZMQ relay shut down!."
+        throw(ProcessFailedException)
     end
 end
 
