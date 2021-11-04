@@ -56,8 +56,8 @@ end
 # TODO: Check if there is a way to capture STDOUT/STDERR from process without waiting
 function check_relay_running(serial_relay::SerialZmqRelay)
     if !process_running(serial_relay) # true
-        @warn "Serial-ZMQ relay shut down!."
-        throw(ProcessFailedException)
+        # @warn "Serial-ZMQ relay shut down!."
+        throw(SerialRelayError("Serial-ZMQ relay shut down!."))
     end
 end
 
