@@ -7,7 +7,9 @@ include(get_zmq.cmake)
 # Build the serial relay exectuble
 add_executable(relay_launch
     serial_relay.h
+    crc8.h
     serial_relay.c
+    crc8.c
     relay_launch.c
 )
 target_compile_definitions(relay_launch
